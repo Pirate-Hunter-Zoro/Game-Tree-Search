@@ -11,17 +11,15 @@
 ################################################################
 
 from ...lib import cli
-from ...lib.game import Game, RandomAgent, discrete_soccer, connect_four
+from ...lib.game import Game, RandomAgent, discrete_soccer
 import sys
 from . import agent, evaluation
 
 game_module = {
     'discrete_soccer': discrete_soccer,
-    'connect_four': connect_four
 }
 evaluations = {
     'discrete_soccer': evaluation.soccer,
-    'connect_four': evaluation.connect_four
 }
 
 def run_game(args):
@@ -54,14 +52,10 @@ def run_game(args):
             agents = [interactive_agent, computer_agent]
             if args.game == 'discrete_soccer':
                 print("You will be playing on the RED team!")
-            elif args.game == 'connect_four':
-                print("You will be placing RED chips!")
         else:
             agents = [computer_agent, interactive_agent]
             if args.game == 'discrete_soccer':
                 print("You will be playing on the BLUE team!")
-            elif args.game == 'connect_four':
-                print("You will be placing BLACK chips!")
         print()
         if args.game == 'discrete_soccer':
             print("""Controls:
@@ -70,10 +64,6 @@ move: q w e
       z x c
 
 kick: space
-""")
-        elif args.game == 'connect_four':
-            print("""Controls:
-place chip: 1,2,3,4,5,6,7
 """)
     else:
         agents = [computer_agent, computer_agent]
@@ -92,7 +82,7 @@ def main(cl_args):
     parser.add_argument('--ab_pruning', action='store_true', help='If included, use alpha-beta pruning.')
     parser.add_argument('--max_playouts', type=int, default=100, help='The maximum number of playouts that Monte Carlo should perform.')
     parser.add_argument('--game', type=str, default='discrete_soccer', \
-                        help='Game to play. (default: discrete_soccer)\n Options: discrete_soccer, connect_four')
+                        help='Game to play. (default: discrete_soccer)\n Options: discrete_soccer')
     parser.add_argument('--interactive', action='store_true', default=False, \
                         help='If included, a human player will be able to join the game.')
 
