@@ -6,15 +6,21 @@ from pyrsistent import m, v, PMap, PVector, field, pvector_field, pmap_field
 from enum import Enum, IntEnum
 import math
 import random
+from typing import Self
+
+##########################################################################################
+##########################################################################################
+##########################################################################################
+##########################################################################################
+##########################################################################################
 
 MAX_KICK_DIST = 5
-
 
 class Action(Enum):
     KICK=1
     MOVE=2
     CHANGE_STANCE=3
-    def move(x, y):
+    def move(x: int, y: int) -> tuple[Self, int, int]:
         return (Action.MOVE, x, y)
 
 
@@ -23,90 +29,18 @@ class Team(IntEnum):
     BLUE = 2
 
     @property
-    def inverse(self):
+    def inverse(self) -> Self:
         return Team.RED if self == Team.BLUE else Team.BLUE
 
     @property
-    def name(self):
+    def name(self) -> str:
         return "red" if self == Team.RED else "blue"
 
-
-class InteractiveAgent(Agent):
-    def __init__(self, evaluation_function=None):
-        self.evaluate = evaluation_function
-
-    def decide(self, state):
-        if self.evaluate:
-            self.evaluate(state, state.current_player, True)
-        while True:
-            pygame.event.clear()
-            event = pygame.event.wait()
-            if event.type == pygame.KEYDOWN:
-                if event.key in [ pygame.K_w ]:
-                    return Action.move(0, 1)
-                if event.key in [ pygame.K_x ]:
-                    return Action.move(0, -1)
-                if event.key in [ pygame.K_a ]:
-                    return Action.move(-1, 0)
-                if event.key in [ pygame.K_d ]:
-                    return Action.move(1, 0)
-                if event.key in [ pygame.K_q ]:
-                    return Action.move(-1, 1)
-                if event.key in [ pygame.K_e ]:
-                    return Action.move(1, 1)
-                if event.key in [ pygame.K_z ]:
-                    return Action.move(-1, -1)
-                if event.key in [ pygame.K_c ]:
-                    return Action.move(1, -1)
-                if event.key in [ pygame.K_s ]:
-                    return Action.CHANGE_STANCE
-                if event.key == pygame.K_SPACE:
-                    return Action.KICK
-
-
-class generator(GameType):
-    def __init__(self, field_width=19, field_height=13, goal_height=5, random_pos=True):
-        self.field_width = field_width
-        self.field_height = field_height
-        self.goal_height = goal_height
-        self.random_pos = random_pos
-
-    def init(self, agents):
-        players = v(*[m(
-            type="player",
-            index=i,
-            agent=agent,
-            team=Team.RED if i % 2 == 0 else Team.BLUE,
-            x=0, y=0,
-            has_ball=False,
-            stance=0
-        ) for i, agent in enumerate(agents)])
-        teams = m(
-            red=v(*[p.index for p in players if p.team == Team.RED]),
-            blue=v(*[p.index for p in players if p.team == Team.BLUE])
-        )
-        ball = m(
-            type='ball',
-            on_field=True,
-            x=int(self.field_width/2)+1,
-            y=int(self.field_height/2)+1
-        )
-        pitch = m(
-            width=self.field_width,
-            height=self.field_height,
-            goal_height=self.goal_height
-        )
-        state = SoccerState(
-            current_player_id=0,
-            players=players,
-            teams=teams,
-            ball=ball,
-            pitch=pitch,
-            winner=None
-        )
-        state = state._update_reset(random_pos=self.random_pos)
-        return state
-
+##########################################################################################
+##########################################################################################
+##########################################################################################
+##########################################################################################
+##########################################################################################
 
 class SoccerState(GameState):
     ################################################################
@@ -724,3 +658,90 @@ class SoccerState(GameState):
         key = [self.current_player, (self.ball.x, self.ball.y)] \
               + [(p.x, p.y, p.stance, p.has_ball) for p in self.players]
         return hash(tuple(key))
+    
+##########################################################################################
+##########################################################################################
+##########################################################################################
+##########################################################################################
+##########################################################################################
+
+class InteractiveAgent(Agent):
+    def __init__(self, evaluation_function=None):
+        self.evaluate = evaluation_function
+
+    def decide(self, state: SoccerState) -> tuple[Action, int, int]:
+        if self.evaluate:
+            self.evaluate(state, state.current_player, True)
+        while True:
+            pygame.event.clear()
+            event = pygame.event.wait()
+            if event.type == pygame.KEYDOWN:
+                if event.key in [ pygame.K_w ]:
+                    return Action.move(0, 1)
+                if event.key in [ pygame.K_x ]:
+                    return Action.move(0, -1)
+                if event.key in [ pygame.K_a ]:
+                    return Action.move(-1, 0)
+                if event.key in [ pygame.K_d ]:
+                    return Action.move(1, 0)
+                if event.key in [ pygame.K_q ]:
+                    return Action.move(-1, 1)
+                if event.key in [ pygame.K_e ]:
+                    return Action.move(1, 1)
+                if event.key in [ pygame.K_z ]:
+                    return Action.move(-1, -1)
+                if event.key in [ pygame.K_c ]:
+                    return Action.move(1, -1)
+                if event.key in [ pygame.K_s ]:
+                    return Action.CHANGE_STANCE
+                if event.key == pygame.K_SPACE:
+                    return Action.KICK
+
+##########################################################################################
+##########################################################################################
+##########################################################################################
+##########################################################################################
+##########################################################################################
+
+class generator(GameType):
+    def __init__(self, field_width=19, field_height=13, goal_height=5, random_pos=True):
+        self.field_width = field_width
+        self.field_height = field_height
+        self.goal_height = goal_height
+        self.random_pos = random_pos
+
+    def init(self, agents: list[Agent]) -> SoccerState:
+        players = v(*[m(
+            type="player",
+            index=i,
+            agent=agent,
+            team=Team.RED if i % 2 == 0 else Team.BLUE,
+            x=0, y=0,
+            has_ball=False,
+            stance=0
+        ) for i, agent in enumerate(agents)])
+        teams = m(
+            red=v(*[p.index for p in players if p.team == Team.RED]),
+            blue=v(*[p.index for p in players if p.team == Team.BLUE])
+        )
+        ball = m(
+            type='ball',
+            on_field=True,
+            x=int(self.field_width/2)+1,
+            y=int(self.field_height/2)+1
+        )
+        pitch = m(
+            width=self.field_width,
+            height=self.field_height,
+            goal_height=self.goal_height
+        )
+        state = SoccerState(
+            current_player_id=0,
+            players=players,
+            teams=teams,
+            ball=ball,
+            pitch=pitch,
+            winner=None
+        )
+        state = state._update_reset(random_pos=self.random_pos)
+        return state
