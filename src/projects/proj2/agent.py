@@ -1,6 +1,45 @@
 #!/usr/bin/env python3
 
 from ...lib.game import Agent, RandomAgent
+from ...lib.game._game import *
+from typing import Self
+
+class GameNode:
+    """Whenever we implement Minimax or Monte-Carlo, we must have some kind of underlying tree.
+    This class will be a node of that tree. 
+    It will contain a game state.
+    It will contain a heuristic value.
+    It will also contain child nodes each with their own game states and values (unless this is a terminal state and hence results in a winning or losing game).
+    """
+    
+    # Class variable
+    created_states = {}
+
+    # Another class variable for evaluating this node's value
+    evaluation_function = lambda state, id : state.reward(player_id=id)
+
+    @staticmethod
+    def get_game_node(state: GameState) -> Self:
+        """This helper method is to avoid creating repeat states and infinite loops with the preceding constructor
+        """
+        if state in GameNode.created_states.keys():
+            return GameNode.created_states[state]
+        else:
+            GameNode.created_states[state] = GameNode(state=state)
+
+    def __init__(self, state: GameState):
+        """Constructor for the GameState object
+        """
+        self.__state = state
+        self.__children = []
+        for action in self.__state.actions:
+            # The call to GameNode.get_game_node avoids infinite state repetition
+            self.__children.append(GameNode.get_game_node(self.__state.act(action=action)))
+        # In the case that this is the FIRST GameNode constructed, we need to add it to the static map
+        if self.__state not in GameNode.created_states.keys():
+            GameNode.created_states[self.__state] = self
+
+    
 
 class MinimaxAgent(RandomAgent):
     """An agent that makes decisions using the Minimax algorithm, using a
@@ -24,6 +63,8 @@ class MinimaxAgent(RandomAgent):
         self.evaluate = evaluate_function
         self.alpha_beta_pruning = alpha_beta_pruning
         self.max_depth = max_depth
+
+        GameNode.evaluation_function = self.evaluate
 
     def decide(self, state):
         # TODO: Implement this agent!
