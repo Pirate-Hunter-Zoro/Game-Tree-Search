@@ -3,6 +3,9 @@
 import math, random
 from ...lib.game import discrete_soccer
 
+BLUE_WIN = 500
+RED_WIN = -500
+
 def soccer(state, player_id):
     # TODO: Implement this function!
     #
@@ -24,10 +27,10 @@ def soccer(state, player_id):
     # Otherwise, we'll need to dive into the game state and decide which player is at an advantage
     if state.reward(player_id=player_id) == 10:
         # Blue won
-        return 200
+        return BLUE_WIN
     elif state.reward(player_id=player_id) == -10:
         # Blue lost
-        return -200
+        return RED_WIN
     else:
         total = 0
         # The game is still ongoing
@@ -77,7 +80,7 @@ def soccer(state, player_id):
             
             red_distance = abs(x_ball - red_x) + abs(y_ball - red_y)
             blue_distance = abs(x_ball - blue_x) + abs(y_ball - blue_y)
-            # If blue is closer, score increases, and score decreases if red is closer
+            # Score increases if blue is closer, and score decreases if red is closer
             total += 10 * (red_distance - blue_distance)
 
         return total
