@@ -94,6 +94,7 @@ class MinimaxAgent(RandomAgent):
         # `state` is the current state, `player` is the player that
         # the agent is representing (NOT the current player in
         # `state`!)  and `depth` is the current depth of recursion.
+        
         return super().decide(state)
 
     def minimax_with_ab_pruning(self, state, player, depth=1,
