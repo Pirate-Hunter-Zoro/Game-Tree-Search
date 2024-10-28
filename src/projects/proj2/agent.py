@@ -2,6 +2,8 @@
 
 from io import _WrappedBuffer, TextIOWrapper
 import math
+
+from src.lib.game.discrete_soccer import Action
 from ...lib.game import Agent, RandomAgent
 from ...lib.game._game import *
 from typing import Self
@@ -36,10 +38,15 @@ class MonteCarloNode:
         self.__first_team = first_team
         self.__expanded = False
         self.__state = state
-        self.__children = []
+        # For each state we can reach, map to that respective child node
+        self.__children = {}
+        # We also need the actions that correspond to each respective child state
+        self.__actions = {}
         for action in self.__state.actions:
             # The call to GameNode.get_game_node avoids infinite state creation repetition
-            self.__children.append(MonteCarloNode.get_game_node(self.__state.act(action=action), first_team=self.__first_team))
+            next_state = self.__state.act(action=action), first_team=self.__first_team
+            self.__children[next_state] = MonteCarloNode.get_game_node(next_state)
+            self.__actions[next_state] = action
         # In the case that this is the FIRST GameNode constructed, we need to add it to the static map
         if self.__state not in MonteCarloNode.created_states.keys():
             MonteCarloNode.created_states[self.__state] = self
@@ -127,10 +134,10 @@ class MonteCarloNode:
     # Class parameter to decide how many Monte Carlo repetitions are necessary before a decision for the next move is available
     monte_carlo_preliminary_count = 100
 
-    def decide_monte_carlo(self) -> Self:
+    def decide_monte_carlo(self) -> Action:
         """After performing Monte Carlo an adequate number of times, see what decision the algorithm will make
         """
-        for _ in range(MonteCarloNode.__monte_carlo_preliminary_count):
+        for _ in range(MonteCarloNode.monte_carlo_preliminary_count):
             self.play_monte_carlo(seen_states=set())
         # Find the best child now that we have explored a bunch
         best_child = self
@@ -140,7 +147,7 @@ class MonteCarloNode:
             if h > record_heuristic:
                 record_heuristic = h
             best_child = child
-        return best_child
+        return self.__actions[best_child]
 
 ####################################################################################################
 # MONTE CARLO agent implementation follows
@@ -189,7 +196,7 @@ class MonteCarloAgent(RandomAgent):
         # `state` is the current state, `player` is the player that
         # the agent is representing (NOT the current player in
         # `state`!).
-        return super().decide(state)
+        return MonteCarloNode(state=state, first_team=(player == 0)).decide_monte_carlo()
 
 ####################################################################################################
 ####################################################################################################
@@ -224,10 +231,13 @@ class MinimaxNode:
         self.__state = state
         # We need the children to be a dictionary so they can be pruned
         self.__children = {}
+        # We also need the actions that correspond to each respective child state
+        self.__actions = {}
         for action in self.__state.actions:
             # The call to GameNode.get_game_node avoids infinite state creation repetition
             next_state = self.__state.act(action=action)
             self.__children[next_state] = MinimaxNode.get_game_node(state=next_state, maximizer=not self.__is_maximizer)
+            self.__actions[next_state] = action
         # In the case that this is the FIRST GameNode constructed, we need to add it to the static map
         if self.__state not in MinimaxNode.created_states.keys():
             MinimaxNode.created_states[self.__state] = self
@@ -249,25 +259,7 @@ class MinimaxNode:
             for child in self.__children:
                 child.__rec_print_minimax(file=file, level=level + 1)
 
-    def decide_minimax(self, alpha_beta: bool=True) -> Self:
-        """Apply minimax algorithm to make a decision for the next move
-        """
-        record_holder = self
-        record_value = float('-inf') if self.__is_maximizer else float('inf')
-        for _, child in self.__children.items():
-            value = child.__rec_decide_minimax(alpha_beta=alpha_beta)
-            if self.__is_maximizer and value > record_value:
-                # Maximizer and broke record
-                record_value = value
-                record_holder = child
-            elif value < record_value:
-                # Minimizer and broke record
-                record_value = value
-                record_holder = child
-
-        return record_holder
-
-    def __rec_get_minimax(self, alpha_beta: bool, alpha: float=float('-inf'), beta: float=float('inf'), depth: int=0) -> float:
+    def __rec_get_minimax(self, alpha_beta: bool, alpha: float=float('-inf'), beta: float=float('inf'), depth: int=1) -> float:
         """Recursive helper method for returning a minimax value from a given node
         """
         if depth == MinimaxNode.max_depth:
@@ -277,7 +269,7 @@ class MinimaxNode:
             for _, child in self.__children.items():
                 if alpha >= beta:
                     break
-                value = child.__rec_decide_minimax(alpha_beta=alpha_beta, alpha=alpha, beta=beta, depth=depth+1)
+                value = child.__rec_get_minimax(alpha_beta=alpha_beta, alpha=alpha, beta=beta, depth=depth+1)
                 if self.__is_maximizer and value > record_value:
                     # Maximizer and broke record
                     record_value = value
@@ -291,7 +283,7 @@ class MinimaxNode:
             # No alpha-beta pruning
             record_value = self.__value
             for _, child in self.__children.items():
-                value = child.__rec_decide_minimax(alpha_beta=alpha_beta, depth=depth+1)
+                value = child.__rec_get_minimax(alpha_beta=alpha_beta, depth=depth+1)
                 if self.__is_maximizer and value > record_value:
                     # Maximizer and broke record
                     record_value = value
@@ -300,6 +292,24 @@ class MinimaxNode:
                     record_value = value
 
             return record_value
+
+    def decide_minimax(self, alpha_beta: bool=True, alpha: float=float('-inf'), beta: float=float('inf'), depth: int=1) -> Action:
+        """Apply minimax algorithm to make a decision for the next move
+        """
+        record_holder = self
+        record_value = alpha if self.__is_maximizer else beta
+        for _, child in self.__children.items():
+            value = child.__rec_get_minimax(alpha_beta=alpha_beta, alpha=alpha, beta=beta, depth=depth)
+            if self.__is_maximizer and value > record_value:
+                # Maximizer and broke record
+                record_value = value
+                record_holder = child
+            elif value < record_value:
+                # Minimizer and broke record
+                record_value = value
+                record_holder = child
+
+        return self.__actions[record_holder]
 
 ####################################################################################################
 # MINIMAX agent implementation follows...
@@ -327,7 +337,8 @@ class MinimaxAgent(RandomAgent):
         self.alpha_beta_pruning = alpha_beta_pruning
         self.max_depth = max_depth
 
-        MonteCarloNode.evaluation_function = self.evaluate
+        MinimaxNode.evaluation_function = self.evaluate
+        MinimaxNode.max_depth = max_depth
 
     def decide(self, state):
         # TODO: Implement this agent!
@@ -358,8 +369,9 @@ class MinimaxAgent(RandomAgent):
         # the agent is representing (NOT the current player in
         # `state`!)  and `depth` is the current depth of recursion.
         
-        return super().decide(state)
+        return MinimaxNode(state=state, maximizer=(player == 0)).decide_minimax(alpha_beta=False, depth=depth)
 
     def minimax_with_ab_pruning(self, state, player, depth=1,
                                 alpha=float('inf'), beta=-float('inf')):
-        return super().decide(state)
+
+        return MinimaxNode(state=state, maximizer=(player == 0)).decide_minimax(alpha_beta=True, alpha=alpha, beta=beta, depth=depth)
