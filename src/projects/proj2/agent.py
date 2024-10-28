@@ -196,7 +196,10 @@ class MonteCarloAgent(RandomAgent):
         # `state` is the current state, `player` is the player that
         # the agent is representing (NOT the current player in
         # `state`!).
-        return MonteCarloNode(state=state, first_team=(player == 0)).decide_monte_carlo()
+        node = MonteCarloNode(state=state, first_team=(player == 0))
+        action = node.decide_monte_carlo()
+        node.print_monte_carlo()
+        return action
 
 ####################################################################################################
 ####################################################################################################
@@ -266,24 +269,29 @@ class MinimaxNode:
             return self.__value
         elif alpha_beta:
             record_value = self.__value
-            for _, child in self.__children.items():
-                if alpha >= beta:
-                    break
-                value = child.__rec_get_minimax(alpha_beta=alpha_beta, alpha=alpha, beta=beta, depth=depth+1)
-                if self.__is_maximizer and value > record_value:
-                    # Maximizer and broke record
-                    record_value = value
-                    alpha = max(alpha, record_value)
-                elif value < record_value:
-                    # Minimizer and broke record
-                    record_value = value
-                    beta = min(beta, record_value)
+            prune_these = []
+            for state, child_node in self.__children.items():
+                prune = alpha >= beta
+                if not prune:
+                    value = child_node.__rec_get_minimax(alpha_beta=alpha_beta, alpha=alpha, beta=beta, depth=depth+1)
+                    if self.__is_maximizer and value > record_value:
+                        # Maximizer and broke record
+                        record_value = value
+                        alpha = max(alpha, record_value)
+                    elif value < record_value:
+                        # Minimizer and broke record
+                        record_value = value
+                        beta = min(beta, record_value)
+                else:
+                    prune_these.append(state)
+            for state in prune_these:
+                del self.__children[state]
             return record_value
         else:
             # No alpha-beta pruning
             record_value = self.__value
-            for _, child in self.__children.items():
-                value = child.__rec_get_minimax(alpha_beta=alpha_beta, depth=depth+1)
+            for _, child_node in self.__children.items():
+                value = child_node.__rec_get_minimax(alpha_beta=alpha_beta, depth=depth+1)
                 if self.__is_maximizer and value > record_value:
                     # Maximizer and broke record
                     record_value = value
@@ -369,9 +377,15 @@ class MinimaxAgent(RandomAgent):
         # the agent is representing (NOT the current player in
         # `state`!)  and `depth` is the current depth of recursion.
         
-        return MinimaxNode(state=state, maximizer=(player == 0)).decide_minimax(alpha_beta=False, depth=depth)
+        node = MinimaxNode(state=state, maximizer=(player == 0))
+        action = node.decide_minimax(alpha_beta=False, depth=depth)
+        node.print_minimax()
+        return action
 
     def minimax_with_ab_pruning(self, state, player, depth=1,
                                 alpha=float('inf'), beta=-float('inf')):
 
-        return MinimaxNode(state=state, maximizer=(player == 0)).decide_minimax(alpha_beta=True, alpha=alpha, beta=beta, depth=depth)
+        node = MinimaxNode(state=state, maximizer=(player == 0))
+        action = node.decide_minimax(alpha_beta=True, alpha=alpha, beta=beta, depth=depth)
+        node.print_minimax()
+        return action
