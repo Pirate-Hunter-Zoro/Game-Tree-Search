@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from io import _WrappedBuffer, TextIOWrapper
 import math
 
 from src.lib.game.discrete_soccer import Action
@@ -44,7 +43,7 @@ class MonteCarloNode:
         self.__actions = {}
         for action in self.__state.actions:
             # The call to GameNode.get_game_node avoids infinite state creation repetition
-            next_state = self.__state.act(action=action), first_team=self.__first_team
+            next_state = self.__state.act(action=action, first_team=self.__first_team)
             self.__children[next_state] = MonteCarloNode.get_game_node(next_state)
             self.__actions[next_state] = action
         # In the case that this is the FIRST GameNode constructed, we need to add it to the static map
@@ -63,7 +62,7 @@ class MonteCarloNode:
         with open(MonteCarloNode.__output_file_monte_carlo, "w") as f:
             self.__rec_print_monte_carlo(f, 0)
     
-    def __rec_print_monte_carlo(self, file: TextIOWrapper[_WrappedBuffer], level: int=0):
+    def __rec_print_monte_carlo(self, file, level: int=0):
         """Recursive part of the Monte Carlo tree display
         """
         file.write("  " * level + str(self.__num_wins) + '/' + str(self.__num_plays) + "\n")
@@ -218,20 +217,20 @@ class MinimaxNode:
     created_states = {}
 
     @staticmethod
-    def get_game_node(state: GameState, first_team: bool) -> Self:
+    def get_game_node(state: GameState, maximizer: bool) -> Self:
         """This helper method is to avoid creating repeat states and infinite loops with the preceding constructor
         """
         if state in MinimaxNode.created_states.keys():
             return MinimaxNode.created_states[state]
         else:
-            MinimaxNode.created_states[state] = MinimaxNode(state=state, first_team=first_team)
+            MinimaxNode.created_states[state] = MinimaxNode(state=state, maximizer=maximizer)
 
     def __init__(self, state: GameState, maximizer: bool=True):
         """Constructor for the GameState object
         """
         self.__is_maximizer = maximizer
-        self.__value = MinimaxNode.evaluation_function(state=self.__state, id=self.__state.current_player)
         self.__state = state
+        self.__value = MinimaxNode.evaluation_function(state=self.__state, player_id=self.__state.current_player)
         # We need the children to be a dictionary so they can be pruned
         self.__children = {}
         # We also need the actions that correspond to each respective child state
@@ -239,8 +238,9 @@ class MinimaxNode:
         for action in self.__state.actions:
             # The call to GameNode.get_game_node avoids infinite state creation repetition
             next_state = self.__state.act(action=action)
-            self.__children[next_state] = MinimaxNode.get_game_node(state=next_state, maximizer=not self.__is_maximizer)
-            self.__actions[next_state] = action
+            if next_state != None:
+                self.__children[next_state] = MinimaxNode.get_game_node(state=next_state, maximizer=not self.__is_maximizer)
+                self.__actions[next_state] = action
         # In the case that this is the FIRST GameNode constructed, we need to add it to the static map
         if self.__state not in MinimaxNode.created_states.keys():
             MinimaxNode.created_states[self.__state] = self
@@ -254,7 +254,7 @@ class MinimaxNode:
         with open(MinimaxNode.__output_file_minimax, "w") as f:
             self.__rec_print_minimax(f, 0)
     
-    def __rec_print_minimax(self, file: TextIOWrapper[_WrappedBuffer], level: int=0):
+    def __rec_print_minimax(self, file, level: int=0):
         """Recursive part of the Monte Carlo tree display
         """
         if level <= MinimaxNode.max_depth:

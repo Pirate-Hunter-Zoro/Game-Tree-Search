@@ -49,18 +49,18 @@ def soccer(state, player_id):
         level_with_goal = state.goal_bottom <= y_ball and y_ball <= state.goal_top
         # If the ball is closer to a certain goal AND level to be kicked into said goal, then SOMEONE is going to be really happy with the state
         ball_score_multiplier = 5 if level_with_goal else 1
-        if abs(state.red_goal_pos - x_ball) < abs(state.blue_goal_pos - x_ball):
+        if abs(state.red_goal_pos[0] - x_ball) < abs(state.blue_goal_pos[0] - x_ball):
             # Ball is closer to the red goal than the blue goal, which makes the blue team happier the closer the ball is to the red goal
-            total += abs(state.blue_goal_pos - x_ball) * ball_score_multiplier
-        elif abs(state.red_goal_pos - x_ball) > abs(state.blue_goal_pos - x_ball):
+            total += abs(state.blue_goal_pos[0] - x_ball) * ball_score_multiplier
+        elif abs(state.red_goal_pos[0] - x_ball) > abs(state.blue_goal_pos[0] - x_ball):
             # Ball is closer to the blue goal, which makes the red ream happier the closer the ball is to the blue goal
-            total -= abs(state.red_goal_pos - x_ball) & ball_score_multiplier
+            total -= abs(state.red_goal_pos[0] - x_ball) * ball_score_multiplier
 
         # Now we should consider who is closer to being in possession of the ball
         if state.current_player_obj.team == discrete_soccer.Team.BLUE and state.current_player_obj.has_ball:
             # Blue team is quite happy to have the ball
             total += 75
-        elif state.current_player_obj.team == discrete_soccer.Team.RED and state.current_player_ob.has_ball:
+        elif state.current_player_obj.team == discrete_soccer.Team.RED and state.current_player_obj.has_ball:
             # Red team is quite happy to have the ball
             total -= 75
         else:
