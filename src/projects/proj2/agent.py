@@ -220,17 +220,22 @@ class MinimaxNode:
     def get_game_node(state: GameState, maximizer: bool) -> Self:
         """This helper method is to avoid creating repeat states and infinite loops with the preceding constructor
         """
-        if state in MinimaxNode.created_states.keys():
-            return MinimaxNode.created_states[state]
+        if state not in MinimaxNode.created_states.keys():
+            return MinimaxNode(state=state, maximizer=maximizer)
         else:
-            MinimaxNode.created_states[state] = MinimaxNode(state=state, maximizer=maximizer)
+            return None
 
-    def __init__(self, state: GameState, maximizer: bool=True):
+    def __init__(self, depth: int, state: GameState, maximizer: bool=True):
         """Constructor for the GameState object
         """
         self.__is_maximizer = maximizer
         self.__state = state
         self.__value = MinimaxNode.evaluation_function(state=self.__state, player_id=self.__state.current_player)
+        # We need to keep track of this state so that it will not repeat in any descendents
+        MinimaxNode.created_states[self.__state] = self
+        if depth >= MinimaxNode.max_depth:
+            return
+        
         # We need the children to be a dictionary so they can be pruned
         self.__children = {}
         # We also need the actions that correspond to each respective child state
@@ -239,8 +244,10 @@ class MinimaxNode:
             # The call to GameNode.get_game_node avoids infinite state creation repetition
             next_state = self.__state.act(action=action)
             if next_state != None:
-                self.__children[next_state] = MinimaxNode.get_game_node(state=next_state, maximizer=not self.__is_maximizer)
-                self.__actions[next_state] = action
+                child_node = MinimaxNode.get_game_node(state=next_state, maximizer=not self.__is_maximizer)
+                if child_node != None:
+                    self.__children[next_state] = child_node
+                    self.__actions[next_state] = action
         # In the case that this is the FIRST GameNode constructed, we need to add it to the static map
         if self.__state not in MinimaxNode.created_states.keys():
             MinimaxNode.created_states[self.__state] = self
@@ -349,8 +356,6 @@ class MinimaxAgent(RandomAgent):
         MinimaxNode.max_depth = max_depth
 
     def decide(self, state):
-        # TODO: Implement this agent!
-        #
         # Read the documentation in /src/lib/game/_game.py for
         # information on what the decide function does.
         #
@@ -385,7 +390,7 @@ class MinimaxAgent(RandomAgent):
     def minimax_with_ab_pruning(self, state, player, depth=1,
                                 alpha=float('inf'), beta=-float('inf')):
 
-        node = MinimaxNode(state=state, maximizer=(player == 0))
+        node = MinimaxNode(parent_state=None, state=state, maximizer=(player == 0))
         action = node.decide_minimax(alpha_beta=True, alpha=alpha, beta=beta, depth=depth)
         node.print_minimax()
         return action
