@@ -2,7 +2,7 @@
 
 import math
 
-from src.lib.game.discrete_soccer import Action
+from src.lib.game.discrete_soccer import Action, GameState
 from ...lib.game import Agent, RandomAgent
 from ...lib.game._game import *
 from typing import Self
@@ -14,45 +14,23 @@ class MonteCarloNode:
     It will contain a the number of game rollouts played at the given state as well as the number of wins.
     It will also contain child nodes each with their own game states and values (unless this is a terminal state and hence results in a winning or losing game).
     """
-    
-    # Keep track of created nodes by their states to avoid repeating node creations for the same state
-    created_states = {}
 
     # Another class variable for deciding how many rollouts to apply to a child node
     __num_rollouts_for_expansion = 10
 
-    @staticmethod
-    def get_game_node(state: GameState, first_team: bool) -> Self:
-        """This helper method is to avoid creating repeat states and infinite loops with the preceding constructor
-        """
-        if state in MonteCarloNode.created_states.keys():
-            return MonteCarloNode.created_states[state]
-        else:
-            MonteCarloNode.created_states[state] = MonteCarloNode(state=state, first_team=first_team)
-
     def __init__(self, state: GameState, first_team: bool=True):
         """Constructor for the GameState object
         """
-        self.__explored_in_monte_carlo = False
         self.__first_team = first_team
-        self.__expanded = False
         self.__state = state
-        # For each state we can reach, map to that respective child node
-        self.__children = {}
-        # We also need the actions that correspond to each respective child state
-        self.__actions = {}
-        for action in self.__state.actions:
-            # The call to GameNode.get_game_node avoids infinite state creation repetition
-            next_state = self.__state.act(action=action, first_team=self.__first_team)
-            self.__children[next_state] = MonteCarloNode.get_game_node(next_state)
-            self.__actions[next_state] = action
-        # In the case that this is the FIRST GameNode constructed, we need to add it to the static map
-        if self.__state not in MonteCarloNode.created_states.keys():
-            MonteCarloNode.created_states[self.__state] = self
-        
-        # The following will be useful for Monte Carlo
         self.__num_wins = 0
         self.__num_plays = 0
+
+        # Map actions to the children they lead to
+        self.__children = {}
+
+        # Map actions to the states they lead to
+        self.__actions = {}
 
     __output_file_monte_carlo = "Monte Carlo.txt"
 
@@ -66,9 +44,8 @@ class MonteCarloNode:
         """Recursive part of the Monte Carlo tree display
         """
         file.write("  " * level + str(self.__num_wins) + '/' + str(self.__num_plays) + "\n")
-        for child in self.__children:
-            if child.__explored_in_monte_carlo:
-                child.__rec_print_monte_carlo(file=file, level=level + 1)
+        for child in self.__children.items():
+            child.__rec_print_monte_carlo(file=file, level=level + 1)
 
     def __roll_out(self, seen_states: set[GameState]) -> bool:
         """Play out a game randomly from this node and return if a positive win occurs
@@ -87,13 +64,20 @@ class MonteCarloNode:
                 return self.__value > 0
             else:
                 # Pick a random child to roll out
-                idx = int(math.random()*len(self.__children))
+                idx = int(math.random()*len(self.__state.actions))
+                next_state = self.__state.act(self.__state.actions[idx])
                 self.__num_plays += 1
-                if self.__children[idx].roll_out(seen_states):
+                next_node = MonteCarloNode(next_state, first_team=self.__first_team)
+                if next_node.roll_out(seen_states):
                     self.__num_wins += 1
                     return True
                 else:
                     return False
+        
+    def __expand(self, seen_states: set[GameState]):
+        """Helper method to give this Monte Carlo node child nodes
+        """
+        
 
     # Class constant to help with the Monte Carlo heuristic method
     __exploration_constant = 100
@@ -171,8 +155,6 @@ class MonteCarloAgent(RandomAgent):
         MonteCarloNode.monte_carlo_preliminary_count = 100
 
     def decide(self, state):
-        # TODO: Implement this agent!
-        #
         # Read the documentation in /src/lib/game/_game.py for
         # information on what the decide function does.
         #
@@ -181,7 +163,7 @@ class MonteCarloAgent(RandomAgent):
         # `self.evaluate`. It will behave identically, but will be
         # able to work for multiple games.
         #
-        # Do NOT call any SoccerState-specific functions! Assume that
+        # Do NOT call any GameState-specific functions! Assume that
         # you can only see the functions provided in the GameState
         # class.
         #
@@ -217,40 +199,40 @@ class MinimaxNode:
     created_states = {}
 
     @staticmethod
-    def get_game_node(state: GameState, maximizer: bool) -> Self:
+    def make_game_node(depth: int, state: GameState, maximizer: bool) -> Self:
         """This helper method is to avoid creating repeat states and infinite loops with the preceding constructor
         """
         if state not in MinimaxNode.created_states.keys():
-            return MinimaxNode(state=state, maximizer=maximizer)
+            return MinimaxNode(depth=depth, state=state, maximizer=maximizer)
         else:
             return None
 
     def __init__(self, depth: int, state: GameState, maximizer: bool=True):
         """Constructor for the GameState object
         """
+        if depth == 1:
+            # New tree
+            MinimaxNode.created_states = {}
         self.__is_maximizer = maximizer
         self.__state = state
         self.__value = MinimaxNode.evaluation_function(state=self.__state, player_id=self.__state.current_player)
         # We need to keep track of this state so that it will not repeat in any descendents
         MinimaxNode.created_states[self.__state] = self
-        if depth >= MinimaxNode.max_depth:
-            return
-        
         # We need the children to be a dictionary so they can be pruned
         self.__children = {}
         # We also need the actions that correspond to each respective child state
         self.__actions = {}
-        for action in self.__state.actions:
-            # The call to GameNode.get_game_node avoids infinite state creation repetition
-            next_state = self.__state.act(action=action)
-            if next_state != None:
-                child_node = MinimaxNode.get_game_node(state=next_state, maximizer=not self.__is_maximizer)
-                if child_node != None:
-                    self.__children[next_state] = child_node
-                    self.__actions[next_state] = action
-        # In the case that this is the FIRST GameNode constructed, we need to add it to the static map
-        if self.__state not in MinimaxNode.created_states.keys():
-            MinimaxNode.created_states[self.__state] = self
+
+        if depth < MinimaxNode.max_depth:
+            # We keep growing the tree
+            for action in self.__state.actions:
+                # The call to GameNode.make_game_node avoids infinite state creation repetition
+                next_state = self.__state.act(action=action)
+                if next_state != None:
+                    child_node = MinimaxNode.make_game_node(depth=depth+1, state=next_state, maximizer=not self.__is_maximizer)
+                    if child_node != None:
+                        self.__children[next_state] = child_node
+                        self.__actions[next_state] = action
         
     # The file a minimax tree will be outputted to when printed
     __output_file_minimax = "Minimax.txt"
@@ -266,13 +248,13 @@ class MinimaxNode:
         """
         if level <= MinimaxNode.max_depth:
             file.write("  " * level + str(self.__value) + "\n")
-            for child in self.__children:
+            for child in self.__children.values():
                 child.__rec_print_minimax(file=file, level=level + 1)
 
     def __rec_get_minimax(self, alpha_beta: bool, alpha: float=float('-inf'), beta: float=float('inf'), depth: int=1) -> float:
         """Recursive helper method for returning a minimax value from a given node
         """
-        if depth == MinimaxNode.max_depth:
+        if depth >= MinimaxNode.max_depth:
             return self.__value
         elif alpha_beta:
             record_value = self.__value
@@ -285,7 +267,7 @@ class MinimaxNode:
                         # Maximizer and broke record
                         record_value = value
                         alpha = max(alpha, record_value)
-                    elif value < record_value:
+                    elif (not self.__is_maximizer) and value < record_value:
                         # Minimizer and broke record
                         record_value = value
                         beta = min(beta, record_value)
@@ -302,7 +284,7 @@ class MinimaxNode:
                 if self.__is_maximizer and value > record_value:
                     # Maximizer and broke record
                     record_value = value
-                elif value < record_value:
+                elif (not self.__is_maximizer) and value < record_value:
                     # Minimizer and broke record
                     record_value = value
 
@@ -319,12 +301,12 @@ class MinimaxNode:
                 # Maximizer and broke record
                 record_value = value
                 record_holder = child
-            elif value < record_value:
+            elif (not self.__is_maximizer) and value < record_value:
                 # Minimizer and broke record
                 record_value = value
                 record_holder = child
 
-        return self.__actions[record_holder]
+        return self.__actions[record_holder.__state]
 
 ####################################################################################################
 # MINIMAX agent implementation follows...
@@ -364,7 +346,7 @@ class MinimaxAgent(RandomAgent):
         # `self.evaluate`. It will behave identically, but will be
         # able to work for multiple games.
         #
-        # Do NOT call any SoccerState-specific functions! Assume that
+        # Do NOT call any GameState-specific functions! Assume that
         # you can only see the functions provided in the GameState
         # class.
         #
@@ -382,7 +364,7 @@ class MinimaxAgent(RandomAgent):
         # the agent is representing (NOT the current player in
         # `state`!)  and `depth` is the current depth of recursion.
         
-        node = MinimaxNode(state=state, maximizer=(player == 0))
+        node = MinimaxNode(depth=depth, state=state, maximizer=(player == 0))
         action = node.decide_minimax(alpha_beta=False, depth=depth)
         node.print_minimax()
         return action
@@ -390,7 +372,7 @@ class MinimaxAgent(RandomAgent):
     def minimax_with_ab_pruning(self, state, player, depth=1,
                                 alpha=float('inf'), beta=-float('inf')):
 
-        node = MinimaxNode(parent_state=None, state=state, maximizer=(player == 0))
+        node = MinimaxNode(depth=depth, parent_state=None, state=state, maximizer=(player == 0))
         action = node.decide_minimax(alpha_beta=True, alpha=alpha, beta=beta, depth=depth)
         node.print_minimax()
         return action

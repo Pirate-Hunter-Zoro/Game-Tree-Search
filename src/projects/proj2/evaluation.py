@@ -7,8 +7,6 @@ BLUE_WIN = 500
 RED_WIN = -500
 
 def soccer(state, player_id):
-    # TODO: Implement this function!
-    #
     # The soccer evaluation function *must* look into the game state
     # when running. It will then return a number, where the larger the
     # number, the better the expected reward (or lower bound reward)
@@ -83,4 +81,4 @@ def soccer(state, player_id):
             # Score increases if blue is closer, and score decreases if red is closer
             total += 10 * (red_distance - blue_distance)
 
-        return total
+        return -total
