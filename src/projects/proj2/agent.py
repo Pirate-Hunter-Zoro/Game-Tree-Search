@@ -219,14 +219,15 @@ class MinimaxNode:
     def __init__(self, state: GameState, maximizer: bool=True):
         """Constructor for the GameState object
         """
-        # TODO: figure out depth limit and boolean for pruning
         self.__is_maximizer = maximizer
         self.__value = MinimaxNode.evaluation_function(state=self.__state, id=self.__state.current_player)
         self.__state = state
-        self.__children = []
+        # We need the children to be a dictionary so they can be pruned
+        self.__children = {}
         for action in self.__state.actions:
             # The call to GameNode.get_game_node avoids infinite state creation repetition
-            self.__children.append(MinimaxNode.get_game_node(state=self.__state.act(action=action), maximizer=self.__is_maximizer))
+            next_state = self.__state.act(action=action)
+            self.__children[next_state] = MinimaxNode.get_game_node(state=next_state, maximizer=not self.__is_maximizer)
         # In the case that this is the FIRST GameNode constructed, we need to add it to the static map
         if self.__state not in MinimaxNode.created_states.keys():
             MinimaxNode.created_states[self.__state] = self
@@ -243,9 +244,62 @@ class MinimaxNode:
     def __rec_print_minimax(self, file: TextIOWrapper[_WrappedBuffer], level: int=0):
         """Recursive part of the Monte Carlo tree display
         """
-        file.write("  " * level + str(self.__value) + "\n")
-        for child in self.__children:
-            child.__rec_print_minimax(file=file, level=level + 1)
+        if level <= MinimaxNode.max_depth:
+            file.write("  " * level + str(self.__value) + "\n")
+            for child in self.__children:
+                child.__rec_print_minimax(file=file, level=level + 1)
+
+    def decide_minimax(self, alpha_beta: bool=True) -> Self:
+        """Apply minimax algorithm to make a decision for the next move
+        """
+        record_holder = self
+        record_value = float('-inf') if self.__is_maximizer else float('inf')
+        for _, child in self.__children.items():
+            value = child.__rec_decide_minimax(alpha_beta=alpha_beta)
+            if self.__is_maximizer and value > record_value:
+                # Maximizer and broke record
+                record_value = value
+                record_holder = child
+            elif value < record_value:
+                # Minimizer and broke record
+                record_value = value
+                record_holder = child
+
+        return record_holder
+
+    def __rec_get_minimax(self, alpha_beta: bool, alpha: float=float('-inf'), beta: float=float('inf'), depth: int=0) -> float:
+        """Recursive helper method for returning a minimax value from a given node
+        """
+        if depth == MinimaxNode.max_depth:
+            return self.__value
+        elif alpha_beta:
+            record_value = self.__value
+            for _, child in self.__children.items():
+                if alpha >= beta:
+                    break
+                value = child.__rec_decide_minimax(alpha_beta=alpha_beta, alpha=alpha, beta=beta, depth=depth+1)
+                if self.__is_maximizer and value > record_value:
+                    # Maximizer and broke record
+                    record_value = value
+                    alpha = max(alpha, record_value)
+                elif value < record_value:
+                    # Minimizer and broke record
+                    record_value = value
+                    beta = min(beta, record_value)
+            return record_value
+        else:
+            # No alpha-beta pruning
+            record_value = self.__value
+            for _, child in self.__children.items():
+                value = child.__rec_decide_minimax(alpha_beta=alpha_beta, depth=depth+1)
+                if self.__is_maximizer and value > record_value:
+                    # Maximizer and broke record
+                    record_value = value
+                elif value < record_value:
+                    # Minimizer and broke record
+                    record_value = value
+
+            return record_value
 
 ####################################################################################################
 # MINIMAX agent implementation follows...
