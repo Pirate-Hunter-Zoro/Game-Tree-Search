@@ -15,8 +15,8 @@ class MonteCarloNode:
     It will also contain child nodes each with their own game states and values (unless this is a terminal state and hence results in a winning or losing game).
     """
 
-    # Another class variable for deciding how many rollouts to apply to a child node
-    __num_rollouts_for_expansion = 10
+    # A class variable for deciding how many rollouts to apply to a child node
+    __rollouts_before_expansion = 10
 
     def __init__(self, state: GameState, first_team: bool=True):
         """Constructor for the GameState object
@@ -57,11 +57,16 @@ class MonteCarloNode:
         else:
             # Not a repeat state
             seen_states.add(self.__state)
+            if self.__num_plays >= MonteCarloNode.__rollouts_before_expansion:
+                self.__expand(seen_states=seen_states)
+            
+            seen_states.add(self.__state)
             if self.__state.is_terminal:
                 # See if this state ended in a win or loss
                 self.__num_plays += 1
-                self.__num_wins += 1 if ((self.__value > 0 and self.__first_team) or (self.__value < 0 and (not self.__first_team))) else 0
-                return self.__value > 0
+                old_wins = self.__num_wins
+                self.__num_wins += 1 if self.__state.reward(player_id = 0 if self.__first_team else 1) > 0 else 0
+                return self.__num_wins > old_wins
             else:
                 # Pick a random child to roll out
                 idx = int(math.random()*len(self.__state.actions))
@@ -77,10 +82,17 @@ class MonteCarloNode:
     def __expand(self, seen_states: set[GameState]):
         """Helper method to give this Monte Carlo node child nodes
         """
-        
-
-    # Class constant to help with the Monte Carlo heuristic method
-    __exploration_constant = 100
+        for action in self.__state.actions:
+            next_state = self.__state.act(action)
+            if next_state not in seen_states:
+                # There's no point in adding a repeat state to explore - the game ends at that point
+                self.__children[next_state] = MonteCarloNode(state=next_state, first_team=self.__first_team)
+                self.__actions[next_state] = action
+                # Roll out this child node a few times
+                self.__num_plays += MonteCarloNode.__rollouts_before_expansion
+                for _ in range(MonteCarloNode.__rollouts_before_expansion):
+                    if self.__children[next_state].__roll_out(seen_states=seen_states):
+                        self.__num_wins += 1
 
     def __monte_carlo_heuristic(self, child: Self) -> float:
         """Helper method to return a float representing how beneficial a particular node is for a heuristic to reach in Monte Carlo
@@ -90,15 +102,7 @@ class MonteCarloNode:
     def play_monte_carlo(self, seen_states: set[GameState]):
         """Run the Monte Carlo algorithm from this tree node, which will use a heuristic to check which child node to make a recursive call on
         """
-        if not self.__explored_in_monte_carlo:
-            self.__explored_in_monte_carlo = True
-        if not self.__expanded:
-            # Then roll this node out
-            self.__num_plays += MonteCarloNode.__num_rollouts_for_expansion
-            for _ in range(MonteCarloNode.__num_rollouts_for_expansion):
-                self.__num_wins += 1 if self.__roll_out(seen_states=seen_states) else 0
-            self.__expanded = True
-        elif not self.__state.is_terminal:
+        if len(self.__children) > 0:
             seen_states.add(self.__state)
             # Look at the children, and based on our Monte Carlo heuristic, select the child to continue down
             best_child = self
@@ -110,11 +114,16 @@ class MonteCarloNode:
                 best_child = child
             old_best_child_plays = best_child.__num_plays
             old_best_child_wins = best_child.__num_wins
+            # Make a recursive call on that child
             best_child.play_monte_carlo(seen_states)
+            # That could have led to the child or further descendant expanding and hence being played many times over
             self.__num_plays += best_child.__num_plays - old_best_child_plays
             self.__num_wins += best_child.__num_wins - old_best_child_wins
+        else:
+            # No children yet, so roll out
+            self.__roll_out(seen_states=seen_states)
 
-    # Class parameter to decide how many Monte Carlo repetitions are necessary before a decision for the next move is available
+    # Class parameter to decide how many Monte Carlo repetitions shall be performed before a decision for the next move is made
     monte_carlo_preliminary_count = 100
 
     def decide_monte_carlo(self) -> Action:
@@ -130,7 +139,7 @@ class MonteCarloNode:
             if h > record_heuristic:
                 record_heuristic = h
             best_child = child
-        return self.__actions[best_child]
+        return self.__actions[best_child.__state]
 
 ####################################################################################################
 # MONTE CARLO agent implementation follows
