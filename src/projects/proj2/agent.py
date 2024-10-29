@@ -45,7 +45,7 @@ class MonteCarloNode:
         """Recursive part of the Monte Carlo tree display
         """
         file.write("  " * level + str(self.__num_wins) + '/' + str(self.__num_plays) + "\n")
-        for child in self.__children.items():
+        for child in self.__children.values():
             child.__rec_print_monte_carlo(file=file, level=level + 1)
 
     def __roll_out(self, seen_states: set[GameState]) -> bool:
@@ -70,8 +70,13 @@ class MonteCarloNode:
                 return self.__num_wins > old_wins
             else:
                 # Pick a random child to roll out
-                idx = random.randint(0, len(self.__state.actions)-1)
-                next_state = self.__state.act(self.__state.actions[idx])
+                next_state = None
+                options = random.sample(self.__state.actions, len(self.__state.actions))
+                options_idx = 0
+                while next_state == None:
+                    next_state = self.__state.act(options[options_idx])
+                    options_idx += 1
+
                 self.__num_plays += 1
                 next_node = MonteCarloNode(next_state, first_team=self.__first_team)
                 if next_node.__roll_out(seen_states):
@@ -95,6 +100,9 @@ class MonteCarloNode:
                     if self.__children[next_state].__roll_out(seen_states=seen_states):
                         self.__num_wins += 1
 
+    # Helper variable to assist with heuristic
+    __exploration_constant = 100
+
     def __monte_carlo_heuristic(self, child: Self) -> float:
         """Helper method to return a float representing how beneficial a particular node is for a heuristic to reach in Monte Carlo
         """
@@ -108,7 +116,7 @@ class MonteCarloNode:
             # Look at the children, and based on our Monte Carlo heuristic, select the child to continue down
             best_child = self
             record_heuristic = float('-inf')
-            for child in self.__children:
+            for child in self.__children.values():
                 h = self.__monte_carlo_heuristic(child=child)
                 if h > record_heuristic:
                     record_heuristic = h
@@ -135,7 +143,7 @@ class MonteCarloNode:
         # Find the best child now that we have explored a bunch
         best_child = self
         record_heuristic = float('-inf')
-        for child in self.__children:
+        for child in self.__children.values():
             h = self.__monte_carlo_heuristic(child=child)
             if h > record_heuristic:
                 record_heuristic = h
