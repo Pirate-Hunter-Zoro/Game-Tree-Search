@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import math
+import random
 
 from src.lib.game.discrete_soccer import Action, GameState
 from ...lib.game import Agent, RandomAgent
@@ -69,11 +70,11 @@ class MonteCarloNode:
                 return self.__num_wins > old_wins
             else:
                 # Pick a random child to roll out
-                idx = int(math.random()*len(self.__state.actions))
+                idx = random.randint(0, len(self.__state.actions)-1)
                 next_state = self.__state.act(self.__state.actions[idx])
                 self.__num_plays += 1
                 next_node = MonteCarloNode(next_state, first_team=self.__first_team)
-                if next_node.roll_out(seen_states):
+                if next_node.__roll_out(seen_states):
                     self.__num_wins += 1
                     return True
                 else:
@@ -84,7 +85,7 @@ class MonteCarloNode:
         """
         for action in self.__state.actions:
             next_state = self.__state.act(action)
-            if next_state not in seen_states:
+            if next_state not in seen_states and next_state != None:
                 # There's no point in adding a repeat state to explore - the game ends at that point
                 self.__children[next_state] = MonteCarloNode(state=next_state, first_team=self.__first_team)
                 self.__actions[next_state] = action

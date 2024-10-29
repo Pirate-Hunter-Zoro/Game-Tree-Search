@@ -4,16 +4,29 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-        {
-            "name": "Python Soccer Debugger",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "evaluate.py",
-            "console": "integratedTerminal",
-            "args": [
-                "proj2",
-                "--interactive"
-            ]
-        }
+      {
+        "name": "Python Soccer Minimax Debugger",
+        "type": "debugpy",
+        "request": "launch",
+        "program": "evaluate.py",
+        "console": "integratedTerminal",
+        "args": ["proj2", "--interactive"]
+      },
+      {
+        "name": "Python Soccer Minimax With Alpha Beta Debugger",
+        "type": "debugpy",
+        "request": "launch",
+        "program": "evaluate.py",
+        "console": "integratedTerminal",
+        "args": ["proj2", "--interactive", "--ab_pruning"]
+      },
+      {
+        "name": "Python Soccer Monte Carlo Debugger",
+        "type": "debugpy",
+        "request": "launch",
+        "program": "evaluate.py",
+        "console": "integratedTerminal",
+        "args": ["proj2", "--interactive", "--search_method", "monte_carlo"]
+      }
     ]
 }

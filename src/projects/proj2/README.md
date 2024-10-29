@@ -150,3 +150,25 @@ The evaluation function should take into account steps into the
 future. For example, if the opponent has the ball, a player that is
 behind their opponent should have a lower evaluation than one whose is
 in-between their opponent and their goal.
+
+### Results from running ```python3 evaluate.py proj2 --help```
+```pygame 2.6.1 (SDL 2.28.4, Python 3.12.6)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+usage: evaluate.py [-h] [--search_method SEARCH_METHOD] [--max_depth MAX_DEPTH] [--ab_pruning]
+                   [--max_playouts MAX_PLAYOUTS] [--game GAME] [--interactive]
+
+Main function for Project 2: Minimax, Alpha-Beta, Monte Carlo Game Tree Search and Reinforcement
+Learning.
+
+options:
+  -h, --help            show this help message and exit
+  --search_method SEARCH_METHOD
+                        Game tree search method to use. (default: minimax) Options: minimax,
+                        monte_carlo
+  --max_depth MAX_DEPTH
+                        The maximum depth that minimax should search.
+  --ab_pruning          If included, use alpha-beta pruning.
+  --max_playouts MAX_PLAYOUTS
+                        The maximum number of playouts that Monte Carlo should perform.
+  --game GAME           Game to play. (default: discrete_soccer) Options: discrete_soccer
+  --interactive         If included, a human player will be able to join the game.```
