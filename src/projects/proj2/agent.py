@@ -314,7 +314,7 @@ class MinimaxNode(BinaryGameTreeNode):
     evaluation_function = lambda state, id : state.reward(player_id=id)
 
     # Class constant for the max depth we are willing to explore
-    max_depth = 3
+    max_depth = 5
 
     # Keep track of each created node by its state to avoid repeats
     created_states = {}
@@ -328,10 +328,12 @@ class MinimaxNode(BinaryGameTreeNode):
         else:
             return None
 
-    def __init__(self, state: GameState, maximizer: bool=True, depth: int=1, alpha_beta: bool=True):
+    def __init__(self, state: GameState, max_depth: int=None, maximizer: bool=True, depth: int=1, alpha_beta: bool=True):
         """Constructor for the GameState object
         """
         super().__init__(state=state, first_team=maximizer)
+        if max_depth != None:
+            MinimaxNode.max_depth = max_depth
         self.__alpha_beta = alpha_beta
         if depth == 1:
             # New tree
@@ -415,6 +417,8 @@ class MinimaxNode(BinaryGameTreeNode):
 ####################################################################################################
 # MINIMAX agent implementation follows...
 
+max_depth = 3
+
 class MinimaxAgent(RandomAgent):
     """An agent that makes decisions using the Minimax algorithm, using a
     evaluation function to approximately guess how good certain states
@@ -468,7 +472,7 @@ class MinimaxAgent(RandomAgent):
         # the agent is representing (NOT the current player in
         # `state`!)  and `depth` is the current depth of recursion.
         
-        node = MinimaxNode(state=state, maximizer=(player == 0), depth=depth, alpha_beta=False)
+        node = MinimaxNode(state=state, max_depth=max_depth, maximizer=(player == 0), depth=depth, alpha_beta=False)
         action = node.decide()
         if print_trees:
             node.display()
@@ -477,7 +481,7 @@ class MinimaxAgent(RandomAgent):
     def minimax_with_ab_pruning(self, state, player, depth=1,
                                 alpha=float('inf'), beta=-float('inf')):
 
-        node = MinimaxNode(state=state, maximizer=(player == 0), depth=depth, alpha_beta=True)
+        node = MinimaxNode(state=state, max_depth=max_depth, maximizer=(player == 0), depth=depth, alpha_beta=True)
         action = node.decide()
         if print_trees:
             node.display()
