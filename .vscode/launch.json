@@ -5,28 +5,28 @@
     "version": "0.2.0",
     "configurations": [
       {
-        "name": "Python Soccer Minimax Debugger",
+        "name": "minimax-depth-3",
         "type": "debugpy",
         "request": "launch",
         "program": "evaluate.py",
         "console": "integratedTerminal",
-        "args": ["proj2", "--interactive"]
+        "args": ["proj2", "--interactive", "--max_depth", "3"]
       },
       {
-        "name": "Python Soccer Minimax With Alpha Beta Debugger",
+        "name": "alpha_beta-depth-3",
         "type": "debugpy",
         "request": "launch",
         "program": "evaluate.py",
         "console": "integratedTerminal",
-        "args": ["proj2", "--interactive", "--ab_pruning"]
+        "args": ["proj2", "--interactive", "--ab_pruning", "--max_depth", "3"]
       },
       {
-        "name": "Python Soccer Monte Carlo Debugger",
+        "name": "monte_carlo-max_playouts-100",
         "type": "debugpy",
         "request": "launch",
         "program": "evaluate.py",
         "console": "integratedTerminal",
-        "args": ["proj2", "--interactive", "--search_method", "monte_carlo"]
+        "args": ["proj2", "--interactive", "--search_method", "monte_carlo", "--max_playouts", "100"]
       }
     ]
 }

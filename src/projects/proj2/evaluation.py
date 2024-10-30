@@ -33,10 +33,10 @@ def soccer(state, player_id):
         total = 0
         # The game is still ongoing
 
-        # See who is in possession of the ball
-        red_in_possession = False
+        # See who gets to go
+        red_going = False
         if state.current_player_obj.team == discrete_soccer.Team.RED:
-            red_in_possession = True
+            red_going = True
         
         # See where the ball is and whose goal the ball is closer to
         x_ball = state.ball.x

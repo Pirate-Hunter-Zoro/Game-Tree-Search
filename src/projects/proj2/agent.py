@@ -138,14 +138,18 @@ class MonteCarloNode(BinaryGameTreeNode):
     """
 
     # A class variable for deciding how many rollouts to apply to a child node
-    __rollouts_before_expansion = 10
+    __rollouts_before_expansion = 5
 
-    def __init__(self, state: GameState, first_team: bool=True):
+    # Class variable to keep track of the total number of rollouts that have occurred
+    __max_roll_outs = 0
+
+    def __init__(self, state: GameState, first_team: bool=True, max_playouts: int=100):
         """Constructor for the GameState object
         """
         super().__init__(state=state, first_team=first_team)
         self.__num_wins = 0
         self.__num_plays = 0
+        MonteCarloNode.__max_roll_outs = max_playouts
 
     def _get_key(self) -> str:
         return f'{self.__num_wins}/{self.__num_plays}'
@@ -180,7 +184,7 @@ class MonteCarloNode(BinaryGameTreeNode):
                     options_idx += 1
 
                 self.__num_plays += 1
-                next_node = MonteCarloNode(next_state, first_team=self._first_team)
+                next_node = MonteCarloNode(next_state, first_team=self._first_team, max_playouts=MonteCarloNode.__max_roll_outs)
                 if next_node.__roll_out(seen_states):
                     self.__num_wins += 1
                     return True
@@ -194,7 +198,7 @@ class MonteCarloNode(BinaryGameTreeNode):
             next_state = self._state.act(action)
             if next_state not in seen_states and next_state != None:
                 # There's no point in adding a repeat state to explore - the game ends at that point
-                self._children[next_state] = MonteCarloNode(state=next_state, first_team=self._first_team)
+                self._children[next_state] = MonteCarloNode(state=next_state, first_team=self._first_team, max_playouts=MonteCarloNode.__max_roll_outs)
                 self._actions[next_state] = action
                 # Roll out this child node a few times
                 self.__num_plays += MonteCarloNode.__rollouts_before_expansion
@@ -272,7 +276,6 @@ class MonteCarloAgent(RandomAgent):
         super().__init__()
         self.evaluate = evaluate_function
         self.max_playouts = max_playouts
-        MonteCarloNode.monte_carlo_preliminary_count = 100
 
     def decide(self, state):
         # Read the documentation in /src/lib/game/_game.py for
@@ -297,7 +300,7 @@ class MonteCarloAgent(RandomAgent):
         # `state` is the current state, `player` is the player that
         # the agent is representing (NOT the current player in
         # `state`!).
-        node = MonteCarloNode(state=state, first_team=(player == 0))
+        node = MonteCarloNode(state=state, first_team=(player == 0), max_playouts=self.max_playouts)
         action = node.decide()
         if print_trees:
             node.display()
@@ -313,9 +316,6 @@ class MinimaxNode(BinaryGameTreeNode):
     # A class variable for evaluating this node's value
     evaluation_function = lambda state, id : state.reward(player_id=id)
 
-    # Class constant for the max depth we are willing to explore
-    max_depth = 5
-
     # Keep track of each created node by its state to avoid repeats
     created_states = {}
 
@@ -328,12 +328,10 @@ class MinimaxNode(BinaryGameTreeNode):
         else:
             return None
 
-    def __init__(self, state: GameState, max_depth: int=None, maximizer: bool=True, depth: int=1, alpha_beta: bool=True):
+    def __init__(self, state: GameState, maximizer: bool=True, depth: int=1, alpha_beta: bool=True, max_depth: int=5):
         """Constructor for the GameState object
         """
         super().__init__(state=state, first_team=maximizer)
-        if max_depth != None:
-            MinimaxNode.max_depth = max_depth
         self.__alpha_beta = alpha_beta
         if depth == 1:
             # New tree
@@ -342,13 +340,13 @@ class MinimaxNode(BinaryGameTreeNode):
         # We need to keep track of this state so that it will not repeat in any descendents
         MinimaxNode.created_states[self._state] = self
 
-        if depth < MinimaxNode.max_depth:
+        if depth < max_depth:
             # We keep growing the tree
             for action in self._state.actions:
                 # The call to GameNode.make_game_node avoids infinite state creation repetition
                 next_state = self._state.act(action=action)
                 if next_state != None:
-                    child_node = MinimaxNode.make_game_node(state=next_state, maximizer=not self._first_team, depth=depth+1, alpha_beta=self.__alpha_beta)
+                    child_node = MinimaxNode.make_game_node(state=next_state, maximizer=not self._first_team, depth=depth+1, alpha_beta=self.__alpha_beta, max_depth=max_depth)
                     if child_node != None:
                         self._children[next_state] = child_node
                         self._actions[next_state] = action
@@ -417,8 +415,6 @@ class MinimaxNode(BinaryGameTreeNode):
 ####################################################################################################
 # MINIMAX agent implementation follows...
 
-max_depth = 3
-
 class MinimaxAgent(RandomAgent):
     """An agent that makes decisions using the Minimax algorithm, using a
     evaluation function to approximately guess how good certain states
@@ -443,7 +439,6 @@ class MinimaxAgent(RandomAgent):
         self.max_depth = max_depth
 
         MinimaxNode.evaluation_function = self.evaluate
-        MinimaxNode.max_depth = max_depth
 
     def decide(self, state):
         # Read the documentation in /src/lib/game/_game.py for
@@ -472,7 +467,7 @@ class MinimaxAgent(RandomAgent):
         # the agent is representing (NOT the current player in
         # `state`!)  and `depth` is the current depth of recursion.
         
-        node = MinimaxNode(state=state, max_depth=max_depth, maximizer=(player == 0), depth=depth, alpha_beta=False)
+        node = MinimaxNode(state=state, maximizer=(player == 0), depth=depth, alpha_beta=False, max_depth=self.max_depth)
         action = node.decide()
         if print_trees:
             node.display()
@@ -481,7 +476,7 @@ class MinimaxAgent(RandomAgent):
     def minimax_with_ab_pruning(self, state, player, depth=1,
                                 alpha=float('inf'), beta=-float('inf')):
 
-        node = MinimaxNode(state=state, max_depth=max_depth, maximizer=(player == 0), depth=depth, alpha_beta=True)
+        node = MinimaxNode(state=state, maximizer=(player == 0), depth=depth, alpha_beta=True, max_depth=self.max_depth,)
         action = node.decide()
         if print_trees:
             node.display()
