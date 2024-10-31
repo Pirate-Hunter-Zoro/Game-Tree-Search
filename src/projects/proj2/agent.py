@@ -10,7 +10,7 @@ from ...lib.game import Agent, RandomAgent
 from ...lib.game._game import *
 from typing import Self
 
-print_trees = True
+print_trees = False
 
 class BinaryGameTreeNode:
 
@@ -187,32 +187,37 @@ class MonteCarloNode(BinaryGameTreeNode):
                 self.__num_wins += 1 if win else 0
                 return win
             else:
-                # Pick a random child to roll out by selecting a random option
-                next_state = None
-                options = random.sample(self._state.actions, len(self._state.actions))
-                options_idx = 0
-                while next_state == None or next_state in MonteCarloNode.__seen_states:
-                    next_state = self._state.act(options[options_idx])
-                    options_idx += 1
                 self.__num_plays += 1
-                if next_state in self._children.keys():
-                    next_node = self._children[next_state]
-                    if next_node.__roll_out(MonteCarloNode.__seen_states):
-                        self.__num_wins += 1
-                else:
-                    next_node = MonteCarloNode(next_state, first_team=self._first_team, max_playouts=MonteCarloNode.__max_roll_outs)
-                    self._children[next_state] = next_node
-                    if next_node.__roll_out():
-                        self.__num_wins += 1
-                        return True
-                    else:
-                        return False
+                MonteCarloNode.__current_roll_outs += 1
+                # Keep choosing random actions until the game ends
+                current_state = self._state
+                new_states_from_rollout = set()
+                while not current_state.is_terminal: 
+                    next_state = None
+                    options = random.sample(current_state.actions, len(current_state.actions))
+                    options_idx = -1
+                    while next_state == None or next_state in MonteCarloNode.__seen_states or next_state in new_states_from_rollout:
+                        options_idx += 1
+                        if options_idx >= len(options):
+                            # We were unable to win from this state because we could go nowhere new
+                            return False
+                    new_states_from_rollout.add(next_state)
+                    current_state = next_state
+
+                # Now that the state is terminal, see if we won or lost
+                win = False
+                player_id = 0 if self._first_team else 1
+                if current_state.reward(player_id=player_id) > 0:
+                    win = True
+                self.__num_wins += 1 if win else 0
+                return win
         
     def __expand(self):
         """Helper method to give this Monte Carlo node child nodes
         """
         for action in self._state.actions:
             next_state = self._state.act(action)
+            self._actions[next_state] = action
             if next_state not in MonteCarloNode.__seen_states and next_state != None and next not in self._children.keys():
                 # There's no point in adding a repeat state to explore - the game ends at that point
                 self._children[next_state] = MonteCarloNode(state=next_state, first_team=self._first_team, max_playouts=MonteCarloNode.__max_roll_outs)
@@ -264,6 +269,7 @@ class MonteCarloNode(BinaryGameTreeNode):
         # Find the best child now that we have explored a bunch
         best_child = self
         record_heuristic = float('-inf')
+        # TODO: producing no children...
         for child in self._children.values():
             h = self.__monte_carlo_heuristic(child=child)
             if h > record_heuristic:

@@ -29,12 +29,12 @@
         "args": ["proj2", "--interactive", "--max_depth", "5"]
       },
       {
-        "name": "alpha_beta-depth-5",
+        "name": "alpha_beta-depth-10",
         "type": "debugpy",
         "request": "launch",
         "program": "evaluate.py",
         "console": "integratedTerminal",
-        "args": ["proj2", "--interactive", "--ab_pruning", "--max_depth", "5"]
+        "args": ["proj2", "--interactive", "--ab_pruning", "--max_depth", "10"]
       },
       {
         "name": "monte_carlo-100-playouts",
