@@ -48,7 +48,7 @@
           "--search_method",
           "monte_carlo",
           "--max_playouts",
-          "200"
+          "100"
         ]
       }
     ]

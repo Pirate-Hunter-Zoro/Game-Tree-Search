@@ -138,138 +138,105 @@ class MonteCarloNode(BinaryGameTreeNode):
     It will also contain child nodes each with their own game states and values (unless this is a terminal state and hence results in a winning or losing game).
     """
 
-    # A class variable for deciding how many rollouts to apply to a child node
-    __rollouts_before_expansion = 5
-
-    # Class variable to keep track of the total number of rollouts that are occurred
-    __max_roll_outs = 200
-
-    # Class variable to keep track of the total number of rollouts that have occurred
-    __current_roll_outs = 0
-
     # Class variable to keep track of the states we have seen
     __seen_states = set()
 
-    def __init__(self, state: GameState, first_team: bool=True, first_node: bool=False, max_playouts: int=100):
+    def __init__(self, state: GameState, parent: Self=None, first_team: bool=True):
         """Constructor for the GameState object
         """
         super().__init__(state=state, first_team=first_team)
-        if first_node:
-            MonteCarloNode.__seen_states = set()
-        self.__num_wins = 0
+        self.__num_losses = 0
         self.__num_plays = 0
-        MonteCarloNode.__max_roll_outs = max_playouts
+        self.__parent = parent
 
     def _get_key(self) -> str:
-        return f'{self.__num_wins}/{self.__num_plays}'
-
-    def __roll_out(self) -> bool:
-        """Play out a game randomly from this node and return if a positive win occurs
-        """
-        if self._state in MonteCarloNode.__seen_states:
-            # Repeat state for this particular rollout - tie game
-            self.__num_plays += 1
-            MonteCarloNode.__current_roll_outs += 1
-            return False
-        else:
-            # Not a repeat state
-            MonteCarloNode.__seen_states.add(self._state)
-            if self.__num_plays >= MonteCarloNode.__rollouts_before_expansion:
-                self.__expand()
-            elif self._state.is_terminal:
-                # See if this state ended in a win or loss
-                MonteCarloNode.__current_roll_outs += 1
-                self.__num_plays += 1
-                win = False
-                player_id = 0 if self._first_team else 1
-                if self._state.reward(player_id=player_id) > 0:
-                    win = True
-                self.__num_wins += 1 if win else 0
-                return win
-            else:
-                self.__num_plays += 1
-                MonteCarloNode.__current_roll_outs += 1
-                # Keep choosing random actions until the game ends
-                current_state = self._state
-                new_states_from_rollout = set()
-                while not current_state.is_terminal: 
-                    next_state = None
-                    options = random.sample(current_state.actions, len(current_state.actions))
-                    options_idx = -1
-                    while next_state == None or next_state in MonteCarloNode.__seen_states or next_state in new_states_from_rollout:
-                        options_idx += 1
-                        if options_idx >= len(options):
-                            # We were unable to win from this state because we could go nowhere new
-                            return False
-                    new_states_from_rollout.add(next_state)
-                    current_state = next_state
-
-                # Now that the state is terminal, see if we won or lost
-                win = False
-                player_id = 0 if self._first_team else 1
-                if current_state.reward(player_id=player_id) > 0:
-                    win = True
-                self.__num_wins += 1 if win else 0
-                return win
+        return f'{self.__num_losses}/{self.__num_plays}'
         
-    def __expand(self):
-        """Helper method to give this Monte Carlo node child nodes
-        """
-        for action in self._state.actions:
-            next_state = self._state.act(action)
-            self._actions[next_state] = action
-            if next_state not in MonteCarloNode.__seen_states and next_state != None and next not in self._children.keys():
-                # There's no point in adding a repeat state to explore - the game ends at that point
-                self._children[next_state] = MonteCarloNode(state=next_state, first_team=self._first_team, max_playouts=MonteCarloNode.__max_roll_outs)
-                self._actions[next_state] = action
-                # Roll out this child node a few times
-                self.__num_plays += MonteCarloNode.__rollouts_before_expansion
-                for _ in range(MonteCarloNode.__rollouts_before_expansion):
-                    if self._children[next_state].__roll_out():
-                        self.__num_wins += 1
-
     # Helper variable to assist with heuristic
     __exploration_constant = 100
 
     def __monte_carlo_heuristic(self, child: Self) -> float:
         """Helper method to return a float representing how beneficial a particular node is for a heuristic to reach in Monte Carlo
         """
-        return child.__num_wins / child.__num_plays + math.sqrt(MonteCarloNode.__exploration_constant*math.log(self.__num_plays)/child.__num_plays)
+        return child.__num_losses/child.__num_plays + MonteCarloNode.__exploration_constant*math.sqrt(math.log(self.__num_plays)/child.__num_plays)
 
-    def __traverse_monte_carlo(self):
+    def __select_leaf(self, root_node: bool=False) -> Self:
         """Run the Monte Carlo algorithm from this tree node, which will use a heuristic to check which child node to make a recursive call on
         """
+        # We need to keep track of the states seen so far in the game so that when we eventually get to a leaf node we'll know what states to NOT repeat when said leaf node is simulated
+        if root_node:
+            MonteCarloNode.__seen_states = set()
         if len(self._children) > 0:
             MonteCarloNode.__seen_states.add(self._state)
             # Look at the children, and based on our Monte Carlo heuristic, select the child to continue down
-            best_child = self
+            best_child = None
             record_heuristic = float('-inf')
             for child in self._children.values():
                 h = self.__monte_carlo_heuristic(child=child)
                 if h > record_heuristic:
                     record_heuristic = h
                 best_child = child
-            old_best_child_plays = best_child.__num_plays
-            old_best_child_wins = best_child.__num_wins
+            
             # Make a recursive call on that child
-            best_child.__traverse_monte_carlo()
-            # That could have led to the child or further descendant expanding and hence being played many times over
-            self.__num_plays += best_child.__num_plays - old_best_child_plays
-            self.__num_wins += best_child.__num_wins - old_best_child_wins
+            return best_child.__select_leaf()
         else:
-            # No children yet, so roll out
-            self.__roll_out()
+            # No children yet we're already at the leaf
+            return self
 
-    def decide(self) -> Action:
-        """After performing Monte Carlo an adequate number of times, see what decision the algorithm will make
+    def __expand(self):
+        """Helper method to give this Monte Carlo node child nodes
         """
-        MonteCarloNode.__current_roll_outs = 0
-        while MonteCarloNode.__current_roll_outs < MonteCarloNode.__max_roll_outs:
-            self.__traverse_monte_carlo()
+        for action in self._state.actions:
+            next_state = self._state.act(action)
+            self._actions[next_state] = action
+            if (next_state not in MonteCarloNode.__seen_states) and (next_state != None) and (next not in self._children.keys()):
+                # There's no point in adding a repeat state to explore - the game ends at that point
+                self._children[next_state] = MonteCarloNode(state=next_state, parent=self, first_team=not self._first_team)
+                self._actions[next_state] = action
+    
+    def __simulate(self):
+        """Play out a game randomly from this node and return if a positive win occurs
+        """
+        # Keep choosing random actions until the game ends
+        current_state = self._state
+        self.__num_plays += 1
+        while not current_state.is_terminal: 
+            next_state = None
+            options = random.sample(current_state.actions, len(current_state.actions))
+            options_idx = -1
+            while (next_state == None) or (next_state in MonteCarloNode.__seen_states):
+                options_idx += 1
+                if options_idx >= len(options):
+                    # We were unable to continue from this state because we could go nowhere new
+                    return
+                else:
+                    next_state = current_state.act(options[options_idx])
+            current_state = next_state
+
+        # Now that the state is terminal, see if we won or lost
+        loss = False
+        player_id = 0 if self._first_team else 1
+        if current_state.reward(player_id=player_id) < 0:
+            loss = True
+        self.__num_losses += 1 if loss else 0
+        self.__back_propagate(parent_wins=loss)
+    
+    def __back_propagate(self, parent_wins:bool):
+        """Helper method to back-propagate the results of a simulation 
+        """
+        if self.__parent != None:
+            self.__parent.__num_losses += 1 if not parent_wins else 0
+            self.__parent.__back_propagate(parent_wins=not parent_wins)
+
+    def decide(self, num_simulations: int) -> Action:
+        """Given the STARTING node of a game, perform the select->expand->simulate->propagate results and the make our choice
+        """
+        for _ in range(num_simulations):
+            self.__select_leaf().__expand()
+            self.__select_leaf().__simulate()
         # Find the best child now that we have explored a bunch
         best_child = self
         record_heuristic = float('-inf')
-        # TODO: producing no children...
         for child in self._children.values():
             h = self.__monte_carlo_heuristic(child=child)
             if h > record_heuristic:
@@ -321,7 +288,7 @@ class MonteCarloAgent(RandomAgent):
         # `state` is the current state, `player` is the player that
         # the agent is representing (NOT the current player in
         # `state`!).
-        node = MonteCarloNode(state=state, first_team=(player == 0), first_node=True, max_playouts=self.max_playouts)
+        node = MonteCarloNode(state=state, first_team=(player == 0), max_rollouts=self.max_playouts)
         action = node.decide()
         if print_trees:
             node.display()
