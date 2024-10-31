@@ -5,6 +5,7 @@ import math
 import random
 
 from src.lib.game.discrete_soccer import Action, GameState
+from src.projects.proj2.evaluation import red_team
 from ...lib.game import Agent, RandomAgent
 from ...lib.game._game import *
 from typing import Self
@@ -13,7 +14,7 @@ print_trees = True
 
 class BinaryGameTreeNode:
 
-    __output_file = "Decision Tree.txt"
+    __output_file = "game-tree.txt"
 
     def __init__(self, state: GameState, first_team: bool=True):
         """Constructor for the GameState object
@@ -44,7 +45,7 @@ class BinaryGameTreeNode:
                 f.write(line + '\n')
     
     def __get_lines(self) -> list[str]:
-        """Returns list of strings, width, height, and horizontal coordinate of the root."""
+        """Returns list of strings - line by line - of this tree printed out"""
         s = self._get_key()
         sub_trees = [child.__get_lines() for child in self._children.values()]
         if len(sub_trees) == 0:
@@ -140,13 +141,21 @@ class MonteCarloNode(BinaryGameTreeNode):
     # A class variable for deciding how many rollouts to apply to a child node
     __rollouts_before_expansion = 5
 
-    # Class variable to keep track of the total number of rollouts that have occurred
-    __max_roll_outs = 0
+    # Class variable to keep track of the total number of rollouts that are occurred
+    __max_roll_outs = 200
 
-    def __init__(self, state: GameState, first_team: bool=True, max_playouts: int=100):
+    # Class variable to keep track of the total number of rollouts that have occurred
+    __current_roll_outs = 0
+
+    # Class variable to keep track of the states we have seen
+    __seen_states = set()
+
+    def __init__(self, state: GameState, first_team: bool=True, first_node: bool=False, max_playouts: int=100):
         """Constructor for the GameState object
         """
         super().__init__(state=state, first_team=first_team)
+        if first_node:
+            MonteCarloNode.__seen_states = set()
         self.__num_wins = 0
         self.__num_plays = 0
         MonteCarloNode.__max_roll_outs = max_playouts
@@ -154,56 +163,64 @@ class MonteCarloNode(BinaryGameTreeNode):
     def _get_key(self) -> str:
         return f'{self.__num_wins}/{self.__num_plays}'
 
-    def __roll_out(self, seen_states: set[GameState]) -> bool:
+    def __roll_out(self) -> bool:
         """Play out a game randomly from this node and return if a positive win occurs
         """
-        if self._state in seen_states:
+        if self._state in MonteCarloNode.__seen_states:
             # Repeat state for this particular rollout - tie game
             self.__num_plays += 1
+            MonteCarloNode.__current_roll_outs += 1
             return False
         else:
             # Not a repeat state
-            seen_states.add(self._state)
+            MonteCarloNode.__seen_states.add(self._state)
             if self.__num_plays >= MonteCarloNode.__rollouts_before_expansion:
-                self.__expand(seen_states=seen_states)
-            
-            seen_states.add(self._state)
-            if self._state.is_terminal:
+                self.__expand()
+            elif self._state.is_terminal:
                 # See if this state ended in a win or loss
+                MonteCarloNode.__current_roll_outs += 1
                 self.__num_plays += 1
-                old_wins = self.__num_wins
-                self.__num_wins += 1 if self._state.reward(player_id = 0 if self._first_team else 1) > 0 else 0
-                return self.__num_wins > old_wins
+                win = False
+                player_id = 0 if self._first_team else 1
+                if self._state.reward(player_id=player_id) > 0:
+                    win = True
+                self.__num_wins += 1 if win else 0
+                return win
             else:
-                # Pick a random child to roll out
+                # Pick a random child to roll out by selecting a random option
                 next_state = None
                 options = random.sample(self._state.actions, len(self._state.actions))
                 options_idx = 0
-                while next_state == None:
+                while next_state == None or next_state in MonteCarloNode.__seen_states:
                     next_state = self._state.act(options[options_idx])
                     options_idx += 1
-
                 self.__num_plays += 1
-                next_node = MonteCarloNode(next_state, first_team=self._first_team, max_playouts=MonteCarloNode.__max_roll_outs)
-                if next_node.__roll_out(seen_states):
-                    self.__num_wins += 1
-                    return True
+                if next_state in self._children.keys():
+                    next_node = self._children[next_state]
+                    if next_node.__roll_out(MonteCarloNode.__seen_states):
+                        self.__num_wins += 1
                 else:
-                    return False
+                    next_node = MonteCarloNode(next_state, first_team=self._first_team, max_playouts=MonteCarloNode.__max_roll_outs)
+                    self._children[next_state] = next_node
+                    if next_node.__roll_out():
+                        self.__num_wins += 1
+                        return True
+                    else:
+                        return False
         
-    def __expand(self, seen_states: set[GameState]):
+    def __expand(self):
         """Helper method to give this Monte Carlo node child nodes
         """
         for action in self._state.actions:
             next_state = self._state.act(action)
-            if next_state not in seen_states and next_state != None:
+            if next_state not in MonteCarloNode.__seen_states and next_state != None and next not in self._children.keys():
                 # There's no point in adding a repeat state to explore - the game ends at that point
                 self._children[next_state] = MonteCarloNode(state=next_state, first_team=self._first_team, max_playouts=MonteCarloNode.__max_roll_outs)
                 self._actions[next_state] = action
                 # Roll out this child node a few times
                 self.__num_plays += MonteCarloNode.__rollouts_before_expansion
                 for _ in range(MonteCarloNode.__rollouts_before_expansion):
-                    if self._children[next_state].__roll_out(seen_states=seen_states):
+                    if self._children[next_state].__roll_out():
                         self.__num_wins += 1
 
     # Helper variable to assist with heuristic
@@ -214,11 +231,11 @@ class MonteCarloNode(BinaryGameTreeNode):
         """
         return child.__num_wins / child.__num_plays + math.sqrt(MonteCarloNode.__exploration_constant*math.log(self.__num_plays)/child.__num_plays)
 
-    def __traverse_monte_carlo(self, seen_states: set[GameState]):
+    def __traverse_monte_carlo(self):
         """Run the Monte Carlo algorithm from this tree node, which will use a heuristic to check which child node to make a recursive call on
         """
         if len(self._children) > 0:
-            seen_states.add(self._state)
+            MonteCarloNode.__seen_states.add(self._state)
             # Look at the children, and based on our Monte Carlo heuristic, select the child to continue down
             best_child = self
             record_heuristic = float('-inf')
@@ -230,22 +247,20 @@ class MonteCarloNode(BinaryGameTreeNode):
             old_best_child_plays = best_child.__num_plays
             old_best_child_wins = best_child.__num_wins
             # Make a recursive call on that child
-            best_child.__traverse_monte_carlo(seen_states)
+            best_child.__traverse_monte_carlo()
             # That could have led to the child or further descendant expanding and hence being played many times over
             self.__num_plays += best_child.__num_plays - old_best_child_plays
             self.__num_wins += best_child.__num_wins - old_best_child_wins
         else:
             # No children yet, so roll out
-            self.__roll_out(seen_states=seen_states)
-
-    # Class parameter to decide how many Monte Carlo repetitions shall be performed before a decision for the next move is made
-    monte_carlo_preliminary_count = 100
+            self.__roll_out()
 
     def decide(self) -> Action:
         """After performing Monte Carlo an adequate number of times, see what decision the algorithm will make
         """
-        for _ in range(MonteCarloNode.monte_carlo_preliminary_count):
-            self.__traverse_monte_carlo(seen_states=set())
+        MonteCarloNode.__current_roll_outs = 0
+        while MonteCarloNode.__current_roll_outs < MonteCarloNode.__max_roll_outs:
+            self.__traverse_monte_carlo()
         # Find the best child now that we have explored a bunch
         best_child = self
         record_heuristic = float('-inf')
@@ -300,7 +315,7 @@ class MonteCarloAgent(RandomAgent):
         # `state` is the current state, `player` is the player that
         # the agent is representing (NOT the current player in
         # `state`!).
-        node = MonteCarloNode(state=state, first_team=(player == 0), max_playouts=self.max_playouts)
+        node = MonteCarloNode(state=state, first_team=(player == 0), first_node=True, max_playouts=self.max_playouts)
         action = node.decide()
         if print_trees:
             node.display()
@@ -320,11 +335,11 @@ class MinimaxNode(BinaryGameTreeNode):
     created_states = {}
 
     @staticmethod
-    def make_game_node(state: GameState, maximizer: bool, depth: int, alpha_beta: bool) -> Self:
+    def make_game_node(state: GameState, maximizer: bool, depth: int, alpha_beta: bool, max_depth: int) -> Self:
         """This helper method is to avoid creating repeat states and infinite loops with the preceding constructor
         """
         if state not in MinimaxNode.created_states.keys():
-            return MinimaxNode(state=state, maximizer=maximizer, depth=depth, alpha_beta=alpha_beta)
+            return MinimaxNode(state=state, maximizer=maximizer, depth=depth, alpha_beta=alpha_beta, max_depth=max_depth)
         else:
             return None
 
@@ -354,18 +369,20 @@ class MinimaxNode(BinaryGameTreeNode):
     def _get_key(self) -> str:
         return str(self.__value)
 
-    def __rec_get_minimax(self, alpha: float=float('-inf'), beta: float=float('inf'), depth: int=1) -> float:
+    def __rec_get_minimax(self, alpha: float=float('-inf'), beta: float=float('inf')) -> float:
         """Recursive helper method for returning a minimax value from a given node
         """
-        if depth >= MinimaxNode.max_depth:
+        if len(self._children) == 0:
             return self.__value
         elif self.__alpha_beta:
-            record_value = self.__value
+            record_value = None
             prune_these = []
             for state, child_node in self._children.items():
                 prune = alpha >= beta
                 if not prune:
-                    value = child_node.__rec_get_minimax(alpha=alpha, beta=beta, depth=depth+1)
+                    value = child_node.__rec_get_minimax(alpha=alpha, beta=beta)
+                    if record_value == None:
+                        record_value = value
                     if self._first_team and value > record_value:
                         # Maximizer and broke record
                         record_value = value
@@ -379,19 +396,22 @@ class MinimaxNode(BinaryGameTreeNode):
                     prune_these.append(state)
             for state in prune_these:
                 del self._children[state]
+            self.__value = record_value
             return record_value
         else:
             # No alpha-beta pruning
-            record_value = self.__value
+            record_value = None
             for _, child_node in self._children.items():
-                value = child_node.__rec_get_minimax(depth=depth+1)
+                value = child_node.__rec_get_minimax()
+                if record_value == None:
+                    record_value = value
                 if self._first_team and value > record_value:
                     # Maximizer and broke record
                     record_value = value
                 elif (not self._first_team) and value < record_value:
                     # Minimizer and broke record
                     record_value = value
-
+            self.__value = record_value
             return record_value
 
     def decide(self) -> Action:
@@ -467,7 +487,8 @@ class MinimaxAgent(RandomAgent):
         # the agent is representing (NOT the current player in
         # `state`!)  and `depth` is the current depth of recursion.
         
-        node = MinimaxNode(state=state, maximizer=(player == 0), depth=depth, alpha_beta=False, max_depth=self.max_depth)
+        # Find out if player is red (maximizer) or blue
+        node = MinimaxNode(state=state, maximizer=red_team(state, player), depth=depth, alpha_beta=False, max_depth=self.max_depth)
         action = node.decide()
         if print_trees:
             node.display()
@@ -476,7 +497,7 @@ class MinimaxAgent(RandomAgent):
     def minimax_with_ab_pruning(self, state, player, depth=1,
                                 alpha=float('inf'), beta=-float('inf')):
 
-        node = MinimaxNode(state=state, maximizer=(player == 0), depth=depth, alpha_beta=True, max_depth=self.max_depth,)
+        node = MinimaxNode(state=state, maximizer=(player == 0), depth=depth, alpha_beta=True, max_depth=self.max_depth)
         action = node.decide()
         if print_trees:
             node.display()
