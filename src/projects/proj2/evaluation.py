@@ -3,8 +3,8 @@
 import math, random
 from ...lib.game import discrete_soccer
 
-RED_WIN = 1000
-BLUE_WIN = -1000
+RED_WIN = 10000
+BLUE_WIN = -10000
 
 def red_team(state, player_id) -> bool:
     """Helper method to determine the team of the player
@@ -74,32 +74,30 @@ def soccer(state, player_id):
         # We want four distances
         dist_player_goal_player = state.dist_to_goal((player.x, player.y), player.team)
         dist_player_goal_opponent = state.dist_to_goal((player.x, player.y), opponent.team)
-        dist_opponent_goal_player = state.dist_to_goal((opponent.x, opponent.y), player.team)
-        dist_opponent_goal_opponent = state.dist_to_goal((opponent.x, opponent.y), opponent.team)
         dist_between_players = abs(player.x - opponent.x) + abs(player.y - opponent.y)
+
+        # If the opponent is CLOSER to the ball than we are, GET TOWARDS OUR GOAL SO WE CAN PROTECT IT
+        if opponent_ball_distance <= player_ball_distance:
+            score -= player_distance_weight * dist_player_goal_opponent
 
         # If the opponent has the ball, maybe we should advance, or maybe we should defend
         if opponent.has_ball:
-            # If the player is closer to their own goal than the opponent is, then it's safe to approach the opponent
-            if dist_player_goal_player < dist_opponent_goal_player:
-                # Punish them for NOT approaching the opponent
-                score -= ball_possession_weight * player_ball_distance
-            else:
-                # BAD BAD BAD - we do NOT want the opponent closer to our goal than we are WITH the ball
-                # MAKE A BEE LINE FOR THE OPPONENT
-                score -= dist_between_players * player_distance_weight
-                # ALSO GET CLOSER TO YOUR OWN GOAL BECAUSE YOU GOTTA PROTECT IT
-                score -= dist_player_goal_player * player_ball_distance
+            # IF WE ARE FAR FROM OUR OWN GOAL THAT'S BAD
+            score -= dist_player_goal_player * player_ball_distance
 
         # On the other hand, we have the reverse situation if we have possession
         if player.has_ball:
-            # If the opponent is closer to their goal than the player is, there's no point in approaching
-            if dist_opponent_goal_opponent > dist_player_goal_opponent:
-                # GOOD GOOD GOOD - we would LOVE to be closer to the opponent's goal than the opponent when we have the ball
-                # Encourage movement farther away from the enemy player
-                score += dist_between_players * player_distance_weight
-            # Go ahead and try to get closer to the opponent's goal as well
-            score -= player_distance_weight * dist_player_goal_opponent
+            # Encourage movement away from the enemy player
+            score += dist_between_players * player_distance_weight
+            # If we have the ball, we'd like to be far away from our goal
+            score += player_distance_weight * dist_player_goal_opponent
+            # We'd also like to be closer to the enemy goal
+            score -= ball_possession_weight * dist_player_goal_player
+
+        # We should also look ahead into the future - whatever state we end up at, the OPPONENT is going to go next
+        if opponent_ball_distance == 1 and player_ball_distance > 1:
+            # We can't stop the opponent from getting the ball - BEE LINE FOR OUR GOAL
+            score -= dist_player_goal_player * player_ball_distance
         
         # If the player is the minimizer - or blue team - return the OPPOSITE of the score
         return score if red_team(state, player_id) else -score

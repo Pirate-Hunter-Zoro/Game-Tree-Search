@@ -37,7 +37,7 @@
         "args": ["proj2", "--interactive", "--ab_pruning", "--max_depth", "10"]
       },
       {
-        "name": "monte_carlo-100-playouts",
+        "name": "monte_carlo-5-playouts",
         "type": "debugpy",
         "request": "launch",
         "program": "evaluate.py",
@@ -48,7 +48,7 @@
           "--search_method",
           "monte_carlo",
           "--max_playouts",
-          "100"
+          "5"
         ]
       }
     ]

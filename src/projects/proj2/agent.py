@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from abc import abstractmethod
+from enum import Enum
 import math
 import random
 
@@ -10,7 +11,12 @@ from ...lib.game import Agent, RandomAgent
 from ...lib.game._game import *
 from typing import Self
 
-print_trees = False
+print_trees = True
+
+class Outcome(Enum):
+    DRAW = 0
+    WIN = 1
+    LOSS = 2
 
 class BinaryGameTreeNode:
 
@@ -145,20 +151,23 @@ class MonteCarloNode(BinaryGameTreeNode):
         """Constructor for the GameState object
         """
         super().__init__(state=state, first_team=first_team)
-        self.__num_losses = 0
+        self.__num_wins = 0
         self.__num_plays = 0
         self.__parent = parent
 
     def _get_key(self) -> str:
-        return f'{self.__num_losses}/{self.__num_plays}'
+        return f'{self.__num_plays - self.__num_wins}/{self.__num_plays}'
         
-    # Helper variable to assist with heuristic
+    # Helper variables to assist with heuristic
+    __exploitation_constant = 100
     __exploration_constant = 100
 
     def __monte_carlo_heuristic(self, child: Self) -> float:
         """Helper method to return a float representing how beneficial a particular node is for a heuristic to reach in Monte Carlo
         """
-        return child.__num_losses/child.__num_plays + MonteCarloNode.__exploration_constant*math.sqrt(math.log(self.__num_plays)/child.__num_plays)
+        exploitation_bias = MonteCarloNode.__exploitation_constant*(1 - child.__num_wins/child.__num_plays)
+        exploration_bias = MonteCarloNode.__exploration_constant*math.sqrt(math.log(self.__num_plays)/child.__num_plays)
+        return exploitation_bias + exploration_bias
 
     def __select_leaf(self, root_node: bool=False) -> Self:
         """Run the Monte Carlo algorithm from this tree node, which will use a heuristic to check which child node to make a recursive call on
@@ -180,7 +189,7 @@ class MonteCarloNode(BinaryGameTreeNode):
             # Make a recursive call on that child
             return best_child.__select_leaf()
         else:
-            # No children yet we're already at the leaf
+            # No children yet - we're already at the leaf
             return self
 
     def __expand(self):
@@ -188,11 +197,14 @@ class MonteCarloNode(BinaryGameTreeNode):
         """
         for action in self._state.actions:
             next_state = self._state.act(action)
-            self._actions[next_state] = action
-            if (next_state not in MonteCarloNode.__seen_states) and (next_state != None) and (next not in self._children.keys()):
+            if (next_state not in MonteCarloNode.__seen_states) and (next_state != None):
                 # There's no point in adding a repeat state to explore - the game ends at that point
-                self._children[next_state] = MonteCarloNode(state=next_state, parent=self, first_team=not self._first_team)
+                MonteCarloNode.__seen_states.add(next_state)
+                next_node = MonteCarloNode(state=next_state, parent=self, first_team=not self._first_team)
+                # Any new node we create needs to be played once - otherwise our heuristic will have a division by zero error
+                next_node.__simulate()
                 self._actions[next_state] = action
+                self._children[next_state] = next_node
     
     def __simulate(self):
         """Play out a game randomly from this node and return if a positive win occurs
@@ -208,9 +220,11 @@ class MonteCarloNode(BinaryGameTreeNode):
                 options_idx += 1
                 if options_idx >= len(options):
                     # We were unable to continue from this state because we could go nowhere new
+                    self.__back_propagate(outcome=Outcome.DRAW)
                     return
                 else:
                     next_state = current_state.act(options[options_idx])
+            MonteCarloNode.__seen_states.add(next_state)
             current_state = next_state
 
         # Now that the state is terminal, see if we won or lost
@@ -218,24 +232,25 @@ class MonteCarloNode(BinaryGameTreeNode):
         player_id = 0 if self._first_team else 1
         if current_state.reward(player_id=player_id) < 0:
             loss = True
-        self.__num_losses += 1 if loss else 0
-        self.__back_propagate(parent_wins=loss)
+        self.__num_wins += 1 if loss else 0
+        self.__back_propagate(outcome=Outcome.LOSS if loss else Outcome.WIN)
     
-    def __back_propagate(self, parent_wins:bool):
+    def __back_propagate(self, outcome:Outcome):
         """Helper method to back-propagate the results of a simulation 
         """
+        # We know our result - what does that mean for our parent?
         if self.__parent != None:
-            self.__parent.__num_losses += 1 if not parent_wins else 0
-            self.__parent.__back_propagate(parent_wins=not parent_wins)
+            self.__parent.__num_plays += 1
+            self.__parent.__num_wins += 1 if outcome == Outcome.LOSS else 0
+            self.__parent.__back_propagate(outcome=Outcome.LOSS if outcome==Outcome.WIN else (Outcome.WIN if outcome==Outcome.LOSS else Outcome.DRAW))
 
     def decide(self, num_simulations: int) -> Action:
         """Given the STARTING node of a game, perform the select->expand->simulate->propagate results and the make our choice
         """
         for _ in range(num_simulations):
-            self.__select_leaf().__expand()
-            self.__select_leaf().__simulate()
+            self.__select_leaf(root_node=True).__expand()
         # Find the best child now that we have explored a bunch
-        best_child = self
+        best_child = None
         record_heuristic = float('-inf')
         for child in self._children.values():
             h = self.__monte_carlo_heuristic(child=child)
@@ -288,8 +303,8 @@ class MonteCarloAgent(RandomAgent):
         # `state` is the current state, `player` is the player that
         # the agent is representing (NOT the current player in
         # `state`!).
-        node = MonteCarloNode(state=state, first_team=(player == 0), max_rollouts=self.max_playouts)
-        action = node.decide()
+        node = MonteCarloNode(state=state, first_team=(player == 0))
+        action = node.decide(self.max_playouts)
         if print_trees:
             node.display()
         return action
