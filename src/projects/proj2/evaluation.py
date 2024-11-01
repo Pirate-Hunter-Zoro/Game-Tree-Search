@@ -3,8 +3,8 @@
 import math, random
 from ...lib.game import discrete_soccer
 
-RED_WIN = 10000
-BLUE_WIN = -10000
+RED_WIN = float('inf')
+BLUE_WIN = float('-inf')
 
 def red_team(state, player_id) -> bool:
     """Helper method to determine the team of the player
@@ -37,13 +37,16 @@ def soccer(state, player_id):
     else:
         # The game is still ongoing
         score = 0
+
+        # Constant max distance between any two points
+        max_distance = state.pitch.width + state.pitch.height + 2
         
         # Grab the player from whose POV we are calculating the score
         player = state.players[player_id]
 
         # Reward the player for having the ball if they have it
         if player.has_ball:
-            score += 300
+            score += 1000
 
         # Grab the opponent player
         opponent = state.players[(player_id + 1) % len(state.players)]
@@ -56,48 +59,49 @@ def soccer(state, player_id):
         y_player = player.y
         y_opponent = opponent.y
 
+        # See where the each goal is - the built-in distance function to the goals is not appearing to be helpful...
+        x_goal_opponent = state.red_goal_pos[0] if opponent.team == discrete_soccer.Team.RED else state.blue_goal_pos[0]
+        y_goal_opponent = state.red_goal_pos[1] if opponent.team == discrete_soccer.Team.RED else state.blue_goal_pos[1]
+        x_goal_player = state.red_goal_pos[0] if player.team == discrete_soccer.Team.RED else state.blue_goal_pos[0]
+        y_goal_player = state.red_goal_pos[1] if player.team == discrete_soccer.Team.RED else state.blue_goal_pos[1]
+
         # Calculate players' distances to ball
         player_ball_distance = abs(x_ball - x_player) + abs(y_ball - y_player)
         opponent_ball_distance = abs(x_ball - x_opponent) + abs(y_ball - y_opponent)
 
-        # Punish the player for being away from the ball
-        ball_distance_weight = 10
-        score -= player_ball_distance * ball_distance_weight
+        # Reward the player for being closer to the ball
+        ball_distance_weight = 500
+        score += player_ball_distance * (max_distance - player_ball_distance)
 
-        # Reward the player for the opponent being away from the ball
-        score += opponent_ball_distance * ball_distance_weight
+        # The following weight will be useful in the case of ball possessions
+        movement_weight = 1000
 
-        # The following weights will be useful in the case of ball possessions
-        ball_possession_weight = 20
-        player_distance_weight = 500
-
-        # We want four distances
-        dist_player_goal_player = state.dist_to_goal((player.x, player.y), player.team)
-        dist_player_goal_opponent = state.dist_to_goal((player.x, player.y), opponent.team)
+        # We want a few distances
+        dist_player_goal_player = abs(player.x - x_goal_player) + abs(player.y - y_goal_player)
+        dist_player_goal_opponent = abs(player.x - x_goal_opponent) + abs(player.y - y_goal_opponent)
         dist_between_players = abs(player.x - opponent.x) + abs(player.y - opponent.y)
 
         # If the opponent is CLOSER to the ball than we are, GET TOWARDS OUR GOAL SO WE CAN PROTECT IT
         if opponent_ball_distance <= player_ball_distance:
-            score -= player_distance_weight * dist_player_goal_opponent
+            score += movement_weight * (max_distance - dist_player_goal_player)
 
-        # If the opponent has the ball, maybe we should advance, or maybe we should defend
+        # If the opponent HAS the ball, double the need to return to our own goal
         if opponent.has_ball:
-            # IF WE ARE FAR FROM OUR OWN GOAL THAT'S BAD
-            score -= dist_player_goal_player * player_ball_distance
+            score += movement_weight * (max_distance - dist_player_goal_player)
 
-        # On the other hand, we have the reverse situation if we have possession
+        # On the other hand, if we have possession
         if player.has_ball:
             # Encourage movement away from the enemy player
-            score += dist_between_players * player_distance_weight
+            score += dist_between_players * movement_weight
             # If we have the ball, we'd like to be far away from our goal
-            score += player_distance_weight * dist_player_goal_opponent
+            score += movement_weight * dist_player_goal_player
             # We'd also like to be closer to the enemy goal
-            score -= ball_possession_weight * dist_player_goal_player
+            score += movement_weight * (max_distance - dist_player_goal_opponent)
 
         # We should also look ahead into the future - whatever state we end up at, the OPPONENT is going to go next
         if opponent_ball_distance == 1 and player_ball_distance > 1:
             # We can't stop the opponent from getting the ball - BEE LINE FOR OUR GOAL
-            score -= dist_player_goal_player * player_ball_distance
+            score += movement_weight * (max_distance - dist_player_goal_player)
         
         # If the player is the minimizer - or blue team - return the OPPOSITE of the score
         return score if red_team(state, player_id) else -score
