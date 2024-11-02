@@ -71,7 +71,7 @@ def soccer(state, player_id):
 
         # Reward the player for being closer to the ball
         ball_distance_weight = 500
-        score += player_ball_distance * (max_distance - player_ball_distance)
+        score += ball_distance_weight * (max_distance - player_ball_distance)
 
         # The following weight will be useful in the case of ball possessions
         movement_weight = 1000
